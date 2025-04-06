@@ -1,10 +1,3 @@
-# 基于仅保留API监控的项目文件重构
-
-我将为您重新生成项目文件，移除所有与日志文件监控相关的内容，仅保留API监控功能。以下是修改后的文件：
-
-## 1. README.md 文件
-
-```markdown:e:\亘安生物\网站相关\云服务器\safeline\readme.md
 # SafeLine Auto Blocker
 
 SafeLine Auto Blocker 是一个用于监控雷池WAF安全日志并自动封禁攻击IP的工具。该工具使用Python编写，可以作为系统服务在后台运行，实现对网站安全威胁的实时防护。
