@@ -1,3 +1,8 @@
+# SafeLine Auto Blocker 配置文件
+# 版本: 1.2.0
+# 作者: Clion Nieh
+# 日期: 2025.4.6
+
 [DEFAULT]
 # 雷池API主机地址
 SAFELINE_HOST = localhost
@@ -8,48 +13,45 @@ SAFELINE_PORT = 9443
 # 加密后的API令牌（由安装脚本自动生成）
 SAFELINE_TOKEN_ENCRYPTED = 
 
-# 默认IP组名称（当未指定特定攻击类型的IP组时使用）
+# 默认IP组名称
 DEFAULT_IP_GROUP = 人机验证
 
 # 是否为不同攻击类型使用不同IP组
 USE_TYPE_GROUPS = true
 
-# 雷池安全日志文件路径
-SAFELINE_LOG_FILE = /var/log/safeline/security.log
-
-# 攻击类型过滤，多个ID用逗号分隔
-# 例如: 7,8,9,11,21 表示只监控代码执行、代码注入、命令注入、文件包含和扫描器类型的攻击
+# 攻击类型过滤，多个ID用逗号分隔（留空监控所有类型）
 ATTACK_TYPES_FILTER = 
 
 # API查询间隔（秒）
-QUERY_INTERVAL = 60
+QUERY_INTERVAL = 10
 
 # 每次查询的最大日志数量
 MAX_LOGS_PER_QUERY = 100
 
-# 是否跟踪日志轮转
-FOLLOW_LOG_ROTATION = true
-
 # 是否启用调试模式
 DEBUG_MODE = false
+
+# 日志保留天数（0表示永久保留）
+LOG_RETENTION_DAYS = 30
 
 [TYPE_GROUP_MAPPING]
 # 攻击类型ID到IP组的映射
 # 格式: 攻击类型ID = IP组名称
+
 # 高危攻击类型加入黑名单组
-0 = 黑名单
-5 = 黑名单
-7 = 黑名单
-8 = 黑名单
-9 = 黑名单
-11 = 黑名单
-29 = 黑名单
+0 = 黑名单   # SQL注入
+5 = 黑名单   # 后门
+7 = 黑名单   # 代码执行
+8 = 黑名单   # 代码注入
+9 = 黑名单   # 命令注入
+11 = 黑名单  # 文件包含
+29 = 黑名单  # 模板注入
 
 # 低危攻击类型加入人机验证组
-1 = 人机验证
-2 = 人机验证
-3 = 人机验证
-4 = 人机验证
-6 = 人机验证
-10 = 人机验证
-21 = 人机验证
+1 = 人机验证   # XSS
+2 = 人机验证   # CSRF
+3 = 人机验证   # SSRF
+4 = 人机验证   # 拒绝服务
+6 = 人机验证   # 反序列化
+10 = 人机验证  # 文件上传
+21 = 人机验证  # 扫描器

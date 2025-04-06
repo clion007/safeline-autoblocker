@@ -1,739 +1,860 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+SafeLine Auto Blocker
+---------------------
+通过API监控雷池WAF安全日志并自动封禁攻击IP的工具。
+
+作者: Clion Nieh
+版本: 1.2.0
+日期: 2025.4.6
+许可证: MIT
+"""
+
 import os
 import sys
 import time
 import json
 import logging
-import requests
 import argparse
 import configparser
-import urllib3
+import requests
+import glob
 import re
-import socket
+import shutil
+import signal
+import threading
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
+# 在导入部分添加
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from requests.packages.urllib3.util.retry import Retry
 
-# 禁用SSL警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# 全局变量
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = "/etc/safeline/auto_blocker.conf"
-LOG_FILE = "/var/log/safeline/auto_blocker.log"
-TEMP_DIR = "/tmp"
-KEY_FILE = "/etc/safeline/auto_blocker.key"
-
-# 默认配置
-# 在全局变量部分添加新的配置项
-SAFELINE_HOST = "localhost"
-SAFELINE_PORT = 9443
-SAFELINE_TOKEN_ENCRYPTED = ""
-DEFAULT_IP_GROUP = "人机验证"
-USE_TYPE_GROUPS = True
-TYPE_GROUP_MAPPING = {}  # 攻击类型ID到IP组的映射
-SAFELINE_LOG_FILE = "/var/log/safeline/security.log"
-ATTACK_TYPES_FILTER = ""  # 攻击类型过滤，多个ID用逗号分隔
-QUERY_INTERVAL = 60
-MAX_LOGS_PER_QUERY = 100
-FOLLOW_LOG_ROTATION = True
-DEBUG_MODE = False
-MAX_RETRIES = 3  # API请求最大重试次数
-RETRY_BACKOFF_FACTOR = 0.5  # 重试间隔因子
-IP_CACHE_EXPIRY = 3600  # IP缓存过期时间（秒）
-
-# IP缓存，避免重复添加
-IP_CACHE = {}
-
-# 攻击类型ID映射
-ATTACK_TYPE_NAMES = {
-    "0": "SQL注入",
-    "1": "XSS",
-    "2": "CSRF",
-    "3": "SSRF",
-    "4": "拒绝服务",
-    "5": "后门",
-    "6": "反序列化",
-    "7": "代码执行",
-    "8": "代码注入",
-    "9": "命令注入",
-    "10": "文件上传",
-    "11": "文件包含",
-    "21": "扫描器",
-    "29": "模板注入"
-}
-
-# 配置日志
+# 配置日志 - 初始配置，后续会被setup_logging替换
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOG_FILE),
         logging.StreamHandler()
     ]
 )
+logger = logging.getLogger('safeline_auto_blocker')
 
-def log_info(message):
-    """记录信息日志"""
-    logging.info(message)
+# 全局变量
+CONFIG_FILE = '/etc/safeline/auto_blocker.conf'
+KEY_FILE = '/etc/safeline/auto_blocker.key'
+VERSION = '1.2.0'  # 修改版本号与文档注释一致
 
-def log_error(message):
-    """记录错误日志"""
-    logging.error(message)
-
-def log_debug(message):
-    """记录调试日志"""
-    if DEBUG_MODE:
-        logging.debug(message)
-
-def load_config():
-    """加载配置文件"""
-    global SAFELINE_HOST, SAFELINE_PORT, SAFELINE_TOKEN_ENCRYPTED, DEFAULT_IP_GROUP
-    global SAFELINE_LOG_FILE, ATTACK_TYPES_FILTER, QUERY_INTERVAL, MAX_LOGS_PER_QUERY
-    global FOLLOW_LOG_ROTATION, DEBUG_MODE, USE_TYPE_GROUPS, TYPE_GROUP_MAPPING
-    global MAX_RETRIES, RETRY_BACKOFF_FACTOR, IP_CACHE_EXPIRY
+class SafeLineAPI:
+    """雷池WAF API接口类"""
     
-    if not os.path.exists(CONFIG_FILE):
-        log_error(f"配置文件不存在: {CONFIG_FILE}")
-        return False
+    def __init__(self, host, port, token, max_retries=3):
+        """初始化API接口"""
+        self.host = host
+        self.port = port
+        self.token = token
+        self.headers = {
+            'X-SLCE-API-TOKEN': self.token,
+            'Content-Type': 'application/json'
+        }
+        
+        # 设置重试策略
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "PUT", "POST", "DELETE"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        
+        # IP组缓存
+        self.ip_groups_cache = {}
+        self.ip_groups_cache_time = None
+        self.ip_groups_cache_ttl = 300  # 缓存有效期5分钟
+        
+        # 已添加IP缓存
+        self.added_ips_cache = {}
     
-    try:
-        config = configparser.ConfigParser()
-        config.read(CONFIG_FILE)
+    def get_attack_logs(self, limit=100, attack_type=None):
+        """获取攻击日志"""
+        url = f"https://{self.host}:{self.port}/api/open/records"
         
-        if 'DEFAULT' in config:
-            SAFELINE_HOST = config['DEFAULT'].get('SAFELINE_HOST', SAFELINE_HOST)
-            SAFELINE_PORT = config['DEFAULT'].getint('SAFELINE_PORT', SAFELINE_PORT)
-            SAFELINE_TOKEN_ENCRYPTED = config['DEFAULT'].get('SAFELINE_TOKEN_ENCRYPTED', SAFELINE_TOKEN_ENCRYPTED)
-            DEFAULT_IP_GROUP = config['DEFAULT'].get('DEFAULT_IP_GROUP', DEFAULT_IP_GROUP)
-            USE_TYPE_GROUPS = config['DEFAULT'].getboolean('USE_TYPE_GROUPS', USE_TYPE_GROUPS)
-            SAFELINE_LOG_FILE = config['DEFAULT'].get('SAFELINE_LOG_FILE', SAFELINE_LOG_FILE)
-            ATTACK_TYPES_FILTER = config['DEFAULT'].get('ATTACK_TYPES_FILTER', ATTACK_TYPES_FILTER)
-            QUERY_INTERVAL = config['DEFAULT'].getint('QUERY_INTERVAL', QUERY_INTERVAL)
-            MAX_LOGS_PER_QUERY = config['DEFAULT'].getint('MAX_LOGS_PER_QUERY', MAX_LOGS_PER_QUERY)
-            FOLLOW_LOG_ROTATION = config['DEFAULT'].getboolean('FOLLOW_LOG_ROTATION', FOLLOW_LOG_ROTATION)
-            DEBUG_MODE = config['DEFAULT'].getboolean('DEBUG_MODE', DEBUG_MODE)
-            MAX_RETRIES = config['DEFAULT'].getint('MAX_RETRIES', MAX_RETRIES)
-            RETRY_BACKOFF_FACTOR = config['DEFAULT'].getfloat('RETRY_BACKOFF_FACTOR', RETRY_BACKOFF_FACTOR)
-            IP_CACHE_EXPIRY = config['DEFAULT'].getint('IP_CACHE_EXPIRY', IP_CACHE_EXPIRY)
+        # 使用page和page_size参数获取最新的日志
+        params = {
+            'page': 1,
+            'page_size': limit
+        }
         
-        # 加载攻击类型IP组映射
-        if USE_TYPE_GROUPS and 'TYPE_GROUP_MAPPING' in config:
-            TYPE_GROUP_MAPPING = dict(config['TYPE_GROUP_MAPPING'])
-            log_info(f"已加载 {len(TYPE_GROUP_MAPPING)} 个攻击类型IP组映射")
+        if attack_type:
+            params['attack_type'] = attack_type
         
-        # 验证配置
-        if not validate_config():
-            log_error("配置验证失败，请检查配置文件")
+        try:
+            response = self.session.get(url, params=params, headers=self.headers)
+            if response.status_code == 200:
+                result = response.json()
+                data = result.get('data', {}).get('data', [])
+                return data
+            else:
+                logger.error(f"获取攻击日志失败: {response.status_code} - {response.text}")
+                return []
+        except Exception as e:
+            logger.error(f"获取攻击日志异常: {str(e)}")
+            return []
+    
+    def add_ip_to_group(self, ip, reason, group_name):
+        """添加IP到指定IP组"""
+        # 检查缓存中是否已添加该IP
+        cache_key = f"{ip}_{group_name}"
+        if cache_key in self.added_ips_cache:
+            return True
+        
+        # 首先获取IP组信息
+        group_info = self._get_ip_group_info(group_name)
+        if not group_info:
+            logger.error(f"未找到IP组: {group_name}")
             return False
         
-        log_info("配置文件加载成功")
-        return True
-    
-    except Exception as e:
-        log_error(f"加载配置文件异常: {str(e)}")
-        return False
-
-def validate_config():
-    """验证配置有效性"""
-    # 验证主机和端口
-    if not SAFELINE_HOST or not SAFELINE_PORT:
-        log_error("无效的主机或端口配置")
-        return False
-    
-    # 验证API令牌
-    if not SAFELINE_TOKEN_ENCRYPTED:
-        log_error("API令牌未配置")
-        return False
-    
-    # 验证IP组名称
-    if not DEFAULT_IP_GROUP:
-        log_error("默认IP组名称未配置")
-        return False
-    
-    # 验证日志文件路径
-    if not os.path.exists(os.path.dirname(SAFELINE_LOG_FILE)):
-        log_error(f"日志文件目录不存在: {os.path.dirname(SAFELINE_LOG_FILE)}")
-        return False
-    
-    # 验证查询间隔
-    if QUERY_INTERVAL < 10:
-        log_error(f"查询间隔过短: {QUERY_INTERVAL}秒，可能导致API过载")
-        return False
-    
-    return True
-
-def decrypt_token(encrypted_token):
-    """解密API令牌"""
-    if not encrypted_token:
-        return ""
-    
-    try:
-        if not os.path.exists(KEY_FILE):
-            log_error(f"密钥文件不存在: {KEY_FILE}")
-            return ""
+        group_id = group_info.get('id')
+        current_ips = group_info.get('ips', [])
         
-        with open(KEY_FILE, 'rb') as f:
-            key = f.read()
-        
-        cipher_suite = Fernet(key)
-        decrypted_token = cipher_suite.decrypt(encrypted_token.encode()).decode()
-        return decrypted_token
-    
-    except Exception as e:
-        log_error(f"解密令牌异常: {str(e)}")
-        return ""
-
-def create_session():
-    """创建带有重试机制的会话"""
-    session = requests.Session()
-    
-    # 定义重试策略
-    retry_strategy = requests.adapters.Retry(
-        total=MAX_RETRIES,
-        backoff_factor=RETRY_BACKOFF_FACTOR,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET", "POST"]
-    )
-    
-    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    session.verify = False
-    
-    return session
-
-def is_valid_ip(ip):
-    """验证IP地址格式"""
-    try:
-        socket.inet_aton(ip)
-        return True
-    except socket.error:
-        return False
-
-def is_ip_in_cache(ip, ip_group):
-    """检查IP是否在缓存中"""
-    cache_key = f"{ip}:{ip_group}"
-    if cache_key in IP_CACHE:
-        # 检查缓存是否过期
-        if time.time() - IP_CACHE[cache_key] < IP_CACHE_EXPIRY:
+        # 检查IP是否已经在组中
+        if ip in current_ips:
+            # 添加到缓存
+            self.added_ips_cache[cache_key] = datetime.now()
             return True
-        else:
-            # 缓存过期，删除
-            del IP_CACHE[cache_key]
-    return False
-
-def add_ip_to_cache(ip, ip_group):
-    """将IP添加到缓存"""
-    cache_key = f"{ip}:{ip_group}"
-    IP_CACHE[cache_key] = time.time()
-
-def query_security_logs(token, start_time=None, end_time=None):
-    """查询安全日志
-    
-    Args:
-        token: API令牌
-        start_time: 开始时间，格式为"YYYY-MM-DD HH:MM:SS"
-        end_time: 结束时间，格式为"YYYY-MM-DD HH:MM:SS"
-    
-    Returns:
-        日志列表
-    """
-    # 如果未指定时间范围，默认查询最近一小时的日志
-    if not start_time:
-        start_time = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
-    if not end_time:
-        end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    log_info(f"查询时间范围: {start_time} 至 {end_time}")
-    
-    headers = {
-        "X-SLCE-API-TOKEN": token,
-        "Content-Type": "application/json"
-    }
-    
-    # 构建API请求URL
-    url = f"https://{SAFELINE_HOST}:{SAFELINE_PORT}/api/open/records"
-    
-    # 构建查询参数
-    params = {
-        "page": 1,
-        "page_size": MAX_LOGS_PER_QUERY,
-        "start_time": start_time,
-        "end_time": end_time
-    }
-    
-    # 如果配置了攻击类型过滤，添加到查询参数中
-    if ATTACK_TYPES_FILTER:
-        params["attack_type"] = ATTACK_TYPES_FILTER
-        log_info(f"使用攻击类型过滤: {ATTACK_TYPES_FILTER}")
-    
-    try:
-        # 创建带有重试机制的会话
-        session = create_session()
         
-        # 发送API请求
-        response = session.get(
-            url,
-            headers=headers,
-            params=params
-        )
+        # 添加新IP到列表
+        current_ips.append(ip)
         
-        if response.status_code != 200:
-            log_error(f"查询安全日志失败: HTTP {response.status_code}")
-            return []
+        url = f"https://{self.host}:{self.port}/api/open/ipgroup"
         
-        # 解析响应数据
-        data = response.json()
+        data = {
+            "id": group_id,
+            "comment": group_name,
+            "reference": "",
+            "ips": current_ips
+        }
         
-        if 'data' not in data:
-            log_error("查询安全日志失败: 响应格式不正确")
-            return []
-        
-        logs = data.get('data', {}).get('list', [])
-        total = data.get('data', {}).get('total', 0)
-        
-        log_info(f"成功获取 {len(logs)} 条日志，总共 {total} 条")
-        return logs
+        try:
+            response = self.session.put(url, headers=self.headers, json=data)
+            success = response.status_code == 200 and response.json().get('err') is None
+            
+            if success:
+                # 添加到缓存
+                self.added_ips_cache[cache_key] = datetime.now()
+                logger.debug(f"成功添加IP {ip} 到 {group_name} 组，原因: {reason}")
+            else:
+                logger.error(f"添加IP {ip} 到 {group_name} 组失败: {response.text}")
+            
+            return success
+        except Exception as e:
+            logger.error(f"添加IP到IP组异常: {str(e)}")
+            return False
     
-    except Exception as e:
-        log_error(f"查询安全日志异常: {str(e)}")
-        return []
-
-def get_attack_types(token):
-    """获取雷池WAF支持的攻击类型列表"""
-    log_info("正在获取攻击类型信息...")
-    
-    # 首先尝试使用本地定义的攻击类型
-    if ATTACK_TYPE_NAMES:
-        log_info("使用本地定义的攻击类型信息:")
-        for attack_id, attack_name in ATTACK_TYPE_NAMES.items():
-            log_info(f"攻击类型ID: {attack_id}, 名称: {attack_name}")
+    def _get_ip_group_info(self, group_name):
+        """获取IP组信息，使用缓存减少API请求"""
+        # 检查缓存是否有效
+        current_time = datetime.now()
+        if (self.ip_groups_cache_time is not None and 
+            (current_time - self.ip_groups_cache_time).total_seconds() < self.ip_groups_cache_ttl and
+            group_name in self.ip_groups_cache):
+            return self.ip_groups_cache[group_name]
         
-        # 构建与API返回格式相似的数据结构
-        attack_types = [{"id": int(id), "name": name} for id, name in ATTACK_TYPE_NAMES.items()]
+        # 缓存无效，重新获取所有IP组
+        url = f"https://{self.host}:{self.port}/api/open/ipgroup"
+        
+        try:
+            response = self.session.get(url, headers=self.headers)
+            if response.status_code != 200:
+                logger.error(f"获取IP组列表失败: {response.status_code} - {response.text}")
+                return None
+            
+            result = response.json()
+            if 'data' not in result or 'nodes' not in result['data']:
+                logger.error("IP组数据格式不正确")
+                return None
+            
+            # 更新缓存
+            self.ip_groups_cache = {}
+            self.ip_groups_cache_time = current_time
+            
+            for group in result['data']['nodes']:
+                if group.get('comment') == group_name:
+                    # 获取详细信息
+                    detail_url = f"https://{self.host}:{self.port}/api/open/ipgroup/detail?id={group.get('id')}"
+                    detail_response = self.session.get(detail_url, headers=self.headers)
+                    
+                    if detail_response.status_code == 200:
+                        detail_result = detail_response.json()
+                        if 'data' in detail_result and 'data' in detail_result['data']:
+                            group_info = detail_result['data']['data']
+                            self.ip_groups_cache[group_name] = group_info
+                            return group_info
+                    
+                    self.ip_groups_cache[group_name] = group
+                    return group
+            
+            logger.error(f"未找到名为 {group_name} 的IP组")
+            return None
+        
+        except Exception as e:
+            logger.error(f"获取IP组信息异常: {str(e)}")
+            return None
+    
+    def get_attack_types(self):
+        """获取攻击类型列表"""
+        # 尝试从API获取攻击类型，如果失败则返回硬编码列表
+        url = f"https://{self.host}:{self.port}/api/open/attack_types"
+        
+        try:
+            response = self.session.get(url, headers=self.headers)
+            if response.status_code == 200:
+                result = response.json()
+                if 'data' in result:
+                    return result['data']
+        except Exception as e:
+            logger.warning(f"从API获取攻击类型失败，使用硬编码列表: {str(e)}")
+        
+        # 返回硬编码的攻击类型列表
+        attack_types = [
+            {"id": 0, "name": "SQL注入"},
+            {"id": 1, "name": "XSS"},
+            {"id": 2, "name": "CSRF"},
+            {"id": 3, "name": "SSRF"},
+            {"id": 4, "name": "拒绝服务"},
+            {"id": 5, "name": "后门"},
+            {"id": 6, "name": "反序列化"},
+            {"id": 7, "name": "代码执行"},
+            {"id": 8, "name": "代码注入"},
+            {"id": 9, "name": "命令注入"},
+            {"id": 10, "name": "文件上传"},
+            {"id": 11, "name": "文件包含"},
+            {"id": 21, "name": "扫描器"},
+            {"id": 29, "name": "模板注入"}
+        ]
         return attack_types
     
-    # 如果本地定义为空，则从API获取
-    headers = {
-        "X-SLCE-API-TOKEN": token,
-        "Content-Type": "application/json"
-    }
+    def clean_cache(self):
+        """清理过期的IP缓存"""
+        current_time = datetime.now()
+        expired_keys = []
+        
+        # 查找过期的缓存项
+        for key, timestamp in self.added_ips_cache.items():
+            if (current_time - timestamp).total_seconds() > 3600:  # 1小时过期
+                expired_keys.append(key)
+        
+        # 删除过期项
+        for key in expired_keys:
+            del self.added_ips_cache[key]
+        
+        if expired_keys:
+            logger.debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
+
+def encrypt_token(token, key):
+    """加密API令牌"""
+    f = Fernet(key.encode())
+    return f.encrypt(token.encode()).decode()
+
+def decrypt_token(encrypted_token, key):
+    """解密API令牌"""
+    f = Fernet(key.encode())
+    return f.decrypt(encrypted_token.encode()).decode()
+
+def parse_config(config_file=CONFIG_FILE):
+    """解析配置文件"""
+    config = configparser.ConfigParser()
+    
+    if not os.path.exists(config_file):
+        logger.error(f"配置文件不存在: {config_file}")
+        return None
     
     try:
-        # 创建带有重试机制的会话
-        session = create_session()
-        
-        response = session.get(
-            f"https://{SAFELINE_HOST}:{SAFELINE_PORT}/api/open/security/attack-types",
-            headers=headers
-        )
-        
-        if response.status_code != 200:
-            log_error(f"获取攻击类型信息失败: HTTP {response.status_code}")
-            return []
-            
-        data = response.json()
-        
-        if 'data' not in data:
-            log_error(f"获取攻击类型信息失败: 响应格式不正确")
-            return []
-        
-        attack_types = data.get('data', [])
-        log_info(f"成功获取 {len(attack_types)} 种攻击类型信息")
-        
-        # 打印攻击类型信息
+        config.read(config_file)
+        return config
+    except Exception as e:
+        logger.error(f"解析配置文件时出错: {str(e)}")
+        return None
+
+def process_log_entry(log_entry, api, default_ip_group, use_type_groups, type_group_mapping, attack_types_filter):
+    """处理单个日志条目"""
+    # 根据实际API返回的字段名获取IP和攻击类型
+    ip = log_entry.get('src_ip')  # 使用src_ip而不是client_ip
+    attack_type = log_entry.get('attack_type')
+    url = log_entry.get('website', '')  # 使用website而不是url
+    
+    if not ip or attack_type is None:
+        return False
+    
+    # 排除黑名单攻击类型(ID为-3)
+    if attack_type == -3:
+        return False
+    
+    # 如果设置了攻击类型过滤，检查是否在过滤列表中
+    if attack_types_filter and str(attack_type) not in attack_types_filter:
+        # 对于不在过滤列表中的攻击类型，将其IP添加到人机验证组
+        attack_type_name = get_attack_type_name(attack_type)
+        reason = f"未列举攻击类型: {attack_type_name} - {url}"
+        return api.add_ip_to_group(ip, reason, default_ip_group)
+    
+    # 获取攻击类型名称
+    attack_type_name = get_attack_type_name(attack_type)
+    
+    # 确定IP组
+    ip_group = default_ip_group
+    if use_type_groups and str(attack_type) in type_group_mapping:
+        ip_group = type_group_mapping[str(attack_type)]
+    
+    # 构建原因
+    reason = f"{attack_type_name} - {url}"
+    
+    # 添加IP到IP组
+    return api.add_ip_to_group(ip, reason, ip_group)
+
+# 攻击类型名称缓存
+attack_type_names = {}
+
+def get_attack_type_name(attack_type_id):
+    """获取攻击类型名称，使用缓存提高性能"""
+    global attack_type_names
+    
+    # 如果缓存中有，直接返回
+    if attack_type_id in attack_type_names:
+        return attack_type_names[attack_type_id]
+    
+    # 否则使用硬编码映射
+    attack_types = {
+        0: "SQL注入",
+        1: "XSS",
+        2: "CSRF",
+        3: "SSRF",
+        4: "拒绝服务",
+        5: "后门",
+        6: "反序列化",
+        7: "代码执行",
+        8: "代码注入",
+        9: "命令注入",
+        10: "文件上传",
+        11: "文件包含",
+        21: "扫描器",
+        29: "模板注入"
+    }
+    
+    name = attack_types.get(attack_type_id, f"未知类型({attack_type_id})")
+    
+    # 添加到缓存
+    attack_type_names[attack_type_id] = name
+    
+    return name
+
+def update_attack_type_names(api):
+    """从API更新攻击类型名称"""
+    global attack_type_names
+    
+    try:
+        attack_types = api.get_attack_types()
         for attack_type in attack_types:
-            log_info(f"攻击类型ID: {attack_type.get('id')}, 名称: {attack_type.get('name')}")
+            attack_id = attack_type.get('id')
+            attack_name = attack_type.get('name')
+            if attack_id is not None and attack_name:
+                attack_type_names[attack_id] = attack_name
         
-        return attack_types
-    
+        logger.debug(f"已更新 {len(attack_types)} 个攻击类型名称")
     except Exception as e:
-        log_error(f"获取攻击类型信息异常: {str(e)}")
-        return []
+        logger.error(f"更新攻击类型名称时出错: {str(e)}")
 
-def get_filtered_logs(token, attack_type_ids, page=1, page_size=20):
-    """获取特定攻击类型的日志"""
-    log_info(f"正在获取攻击类型ID为 {attack_type_ids} 的日志...")
-    
-    headers = {
-        "X-SLCE-API-TOKEN": token,
-        "Content-Type": "application/json"
-    }
-    
-    # 构建查询参数
-    params = {
-        "page": page,
-        "page_size": page_size,
-        "attack_type": attack_type_ids
-    }
-    
-    try:
-        # 创建带有重试机制的会话
-        session = create_session()
-        
-        response = session.get(
-            f"https://{SAFELINE_HOST}:{SAFELINE_PORT}/api/open/records",
-            headers=headers,
-            params=params
-        )
-        
-        if response.status_code != 200:
-            log_error(f"获取过滤日志失败: HTTP {response.status_code}")
-            return []
-            
-        data = response.json()
-        
-        if 'data' not in data:
-            log_error(f"获取过滤日志失败: 响应格式不正确")
-            return []
-        
-        logs = data.get('data', {}).get('list', [])
-        total = data.get('data', {}).get('total', 0)
-        log_info(f"成功获取 {len(logs)} 条日志，总共 {total} 条")
-        
-        # 打印日志信息
-        for log in logs:
-            ip = log.get('client_ip', 'Unknown')
-            attack_type = log.get('attack_type_name', 'Unknown')
-            url = log.get('url', 'Unknown')
-            time = log.get('time', 'Unknown')
-            log_info(f"时间: {time}, IP: {ip}, 攻击类型: {attack_type}, URL: {url}")
-        
-        return logs
-    
-    except Exception as e:
-        log_error(f"获取过滤日志异常: {str(e)}")
-        return []
-
-def process_logs(token, logs):
-    """处理日志，提取攻击IP并添加到黑名单"""
-    if not logs:
-        log_info("没有新的日志需要处理")
+def clean_old_logs(log_dir, retention_days):
+    """清理过期的日志文件"""
+    if retention_days <= 0:
         return
     
-    log_info(f"开始处理 {len(logs)} 条日志")
-    
-    # 按攻击类型分组提取攻击IP
-    attack_ips_by_type = {}
-    
-    for log_entry in logs:
-        ip = log_entry.get('client_ip')
-        if not ip or not is_valid_ip(ip):
-            log_debug(f"跳过无效IP: {ip}")
-            continue
-        
-        # 获取攻击类型ID和名称
-        attack_type_id = str(log_entry.get('attack_type', '0'))
-        attack_type_name = log_entry.get('attack_type_name', '未知攻击')
-        if not attack_type_name and attack_type_id in ATTACK_TYPE_NAMES:
-            attack_type_name = ATTACK_TYPE_NAMES[attack_type_id]
-        
-        attack_info = f"{attack_type_name}(ID:{attack_type_id})"
-        
-        # 获取攻击URL
-        url = log_entry.get('url', '未知URL')
-        
-        # 记录详细的攻击信息
-        log_info(f"检测到攻击: IP={ip}, 类型={attack_info}, URL={url}")
-        
-        # 按攻击类型分组
-        if attack_type_id not in attack_ips_by_type:
-            attack_ips_by_type[attack_type_id] = {}
-        
-        if ip in attack_ips_by_type[attack_type_id]:
-            attack_ips_by_type[attack_type_id][ip]['count'] += 1
-            attack_ips_by_type[attack_type_id][ip]['urls'].add(url)
-        else:
-            attack_ips_by_type[attack_type_id][ip] = {
-                'count': 1,
-                'type_name': attack_type_name,
-                'urls': {url}
-            }
-    
-    # 处理每种攻击类型的IP
-    for attack_type_id, ips in attack_ips_by_type.items():
-        # 确定使用哪个IP组
-        ip_group = DEFAULT_IP_GROUP
-        if USE_TYPE_GROUPS and attack_type_id in TYPE_GROUP_MAPPING:
-            ip_group = TYPE_GROUP_MAPPING[attack_type_id]
-            log_info(f"攻击类型 {attack_type_id} 使用IP组: {ip_group}")
-        
-        # 添加IP到对应的IP组
-        for ip, info in ips.items():
-            # 检查IP是否已在缓存中
-            if is_ip_in_cache(ip, ip_group):
-                log_info(f"跳过已处理的IP: {ip}, IP组: {ip_group}")
-                continue
-                
-            attack_urls = ', '.join(list(info['urls'])[:3])  # 最多显示3个URL
-            if len(info['urls']) > 3:
-                attack_urls += f" 等{len(info['urls'])}个URL"
-                
-            reason = f"自动封禁: 攻击类型={info['type_name']}, 攻击URL={attack_urls}, 攻击次数={info['count']}"
-            log_info(f"封禁IP: {ip}, IP组: {ip_group}, 原因: {reason}")
-            
-            # 添加IP到指定IP组
-            if add_ip_to_blacklist(token, ip, ip_group, reason[:200]):
-                # 添加成功，将IP加入缓存
-                add_ip_to_cache(ip, ip_group)
-
-def add_ip_to_blacklist(token, ip, ip_group, reason):
-    """添加IP到指定IP组"""
-    # 验证IP地址格式
-    if not is_valid_ip(ip):
-        log_error(f"无效的IP地址格式: {ip}")
-        return False
-        
-    log_info(f"添加IP到IP组: {ip}, IP组: {ip_group}, 原因: {reason}")
-    
-    headers = {
-        "X-SLCE-API-TOKEN": token,
-        "Content-Type": "application/json"
-    }
-    
-    # 构建请求数据
-    data = {
-        "group_name": ip_group,
-        "ip": ip,
-        "comment": reason
-    }
-    
     try:
-        # 创建带有重试机制的会话
-        session = create_session()
+        # 获取当前日期
+        current_date = datetime.now()
+        # 计算截止日期
+        cutoff_date = current_date - timedelta(days=retention_days)
         
-        # 发送API请求
-        response = session.post(
-            f"https://{SAFELINE_HOST}:{SAFELINE_PORT}/api/open/security/ip-group/add",
-            headers=headers,
-            json=data
-        )
+        # 日志文件名格式：auto_blocker.log.YYYY-MM-DD
+        log_pattern = os.path.join(log_dir, "auto_blocker.log.*")
+        log_files = glob.glob(log_pattern)
         
-        if response.status_code == 200:
-            log_info(f"成功添加IP到IP组: {ip}, IP组: {ip_group}")
-            return True
-        else:
-            log_error(f"添加IP到IP组失败: HTTP {response.status_code}, 响应: {response.text}")
-            return False
+        # 日期提取正则表达式
+        date_pattern = re.compile(r'auto_blocker\.log\.(\d{4}-\d{2}-\d{2})')
+        
+        deleted_count = 0
+        for log_file in log_files:
+            match = date_pattern.search(log_file)
+            if match:
+                log_date_str = match.group(1)
+                try:
+                    log_date = datetime.strptime(log_date_str, "%Y-%m-%d")
+                    if log_date < cutoff_date:
+                        os.remove(log_file)
+                        deleted_count += 1
+                except ValueError:
+                    logger.warning(f"无法解析日志文件日期: {log_file}")
+        
+        if deleted_count > 0:
+            logger.debug(f"已删除 {deleted_count} 个过期日志文件")
     
     except Exception as e:
-        log_error(f"添加IP到IP组异常: {str(e)}")
-        return False
+        logger.error(f"清理日志文件时出错: {str(e)}")
 
-def process_single_ip(token, ip, reason=None, ip_group=None):
-    """处理单个IP，添加到指定IP组"""
-    # 验证IP地址格式
-    if not is_valid_ip(ip):
-        log_error(f"无效的IP地址格式: {ip}")
-        return False
+def check_log_rotation(log_file, max_size=10*1024*1024):
+    """检查并执行日志轮转"""
+    if os.path.exists(log_file) and os.path.getsize(log_file) > max_size:
+        # 生成带日期的备份文件名
+        backup_file = f"{log_file}.{datetime.now().strftime('%Y-%m-%d')}"
         
-    if not reason:
-        reason = "手动添加"
-    
-    if not ip_group:
-        ip_group = DEFAULT_IP_GROUP
-    
-    log_info(f"手动添加IP到IP组: {ip}, IP组: {ip_group}, 原因: {reason}")
-    
-    # 检查IP是否已在缓存中
-    if is_ip_in_cache(ip, ip_group):
-        log_info(f"IP已在IP组中: {ip}, IP组: {ip_group}")
-        return True
+        # 如果同一天已经有备份，添加序号
+        counter = 1
+        while os.path.exists(backup_file):
+            backup_file = f"{log_file}.{datetime.now().strftime('%Y-%m-%d')}.{counter}"
+            counter += 1
         
-    # 添加IP到指定IP组
-    if add_ip_to_blacklist(token, ip, ip_group, reason):
-        # 添加成功，将IP加入缓存
-        add_ip_to_cache(ip, ip_group)
-        return True
+        # 重命名当前日志文件
+        try:
+            shutil.move(log_file, backup_file)
+            logger.debug(f"日志文件已轮转: {log_file} -> {backup_file}")
+            return True
+        except Exception as e:
+            logger.error(f"轮转日志文件失败: {str(e)}")
+    
     return False
 
-def process_log_line(token, line):
-    """处理单行日志"""
-    try:
-        # 解析日志行
-        log_data = json.loads(line)
-        
-        # 提取IP和攻击类型
-        ip = log_data.get('client_ip')
-        if not ip or not is_valid_ip(ip):
-            log_debug(f"跳过无效IP: {ip}")
-            return
-            
-        attack_type_id = str(log_data.get('attack_type', '0'))
-        attack_type_name = log_data.get('attack_type_name', '未知攻击')
-        if not attack_type_name and attack_type_id in ATTACK_TYPE_NAMES:
-            attack_type_name = ATTACK_TYPE_NAMES[attack_type_id]
-        
-        # 确定使用哪个IP组
-        ip_group = DEFAULT_IP_GROUP
-        if USE_TYPE_GROUPS and attack_type_id in TYPE_GROUP_MAPPING:
-            ip_group = TYPE_GROUP_MAPPING[attack_type_id]
-        
-        # 检查IP是否已在缓存中
-        if is_ip_in_cache(ip, ip_group):
-            log_info(f"跳过已处理的IP: {ip}, IP组: {ip_group}")
-            return
-            
-        log_info(f"发现攻击IP: {ip}, 攻击类型: {attack_type_name}, IP组: {ip_group}")
-        
-        # 添加IP到指定IP组
-        if add_ip_to_blacklist(token, ip, ip_group, f"自动封禁: {attack_type_name}"):
-            # 添加成功，将IP加入缓存
-            add_ip_to_cache(ip, ip_group)
+def setup_logging():
+    """设置日志记录"""
+    log_dir = '/var/log/safeline'
+    log_file = os.path.join(log_dir, 'auto_blocker.log')
     
-    except json.JSONDecodeError:
-        log_debug(f"无法解析日志行: {line}")
-    except Exception as e:
-        log_error(f"处理日志行异常: {str(e)}")
+    # 确保日志目录存在
+    if not os.path.exists(log_dir):
+        try:
+            os.makedirs(log_dir)
+        except Exception as e:
+            print(f"创建日志目录失败: {str(e)}")
+            sys.exit(1)
+    
+    # 检查日志轮转
+    check_log_rotation(log_file)
+    
+    # 创建日志处理器
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)  # 文件日志记录DEBUG级别
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)  # 控制台也显示DEBUG级别
+    
+    # 配置日志格式
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # 配置根日志记录器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # 根日志级别设置为DEBUG
+    root_logger.handlers = []  # 清除现有处理器
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    # 获取应用日志记录器
+    app_logger = logging.getLogger('safeline_auto_blocker')
+    
+    return app_logger, log_dir
 
-def verify_ip_groups(token):
-    """验证IP组是否存在"""
-    log_info("验证IP组是否存在...")
+# 在main函数之前添加daemonize函数
+def daemonize():
+    """将程序转为守护进程运行（仅支持Unix/Linux）"""
+    try:
+        # 第一次fork
+        pid = os.fork()
+        if pid > 0:
+            # 父进程退出
+            sys.exit(0)
+    except OSError as e:
+        logger.error(f"第一次fork失败: {e}")
+        sys.exit(1)
     
-    headers = {
-        "X-SLCE-API-TOKEN": token,
-        "Content-Type": "application/json"
-    }
+    # 修改工作目录
+    os.chdir('/')
+    # 设置新会话
+    os.setsid()
+    # 修改文件创建掩码
+    os.umask(0)
     
     try:
-        # 创建带有重试机制的会话
-        session = create_session()
-        
-        # 获取IP组列表
-        response = session.get(
-            f"https://{SAFELINE_HOST}:{SAFELINE_PORT}/api/open/security/ip-groups",
-            headers=headers
-        )
-        
-        if response.status_code != 200:
-            log_error(f"获取IP组列表失败: HTTP {response.status_code}")
-            return False
-            
-        data = response.json()
-        
-        if 'data' not in data:
-            log_error("获取IP组列表失败: 响应格式不正确")
-            return False
-            
-        ip_groups = data.get('data', [])
-        ip_group_names = [group.get('name') for group in ip_groups]
-        
-        log_info(f"已获取IP组列表: {', '.join(ip_group_names)}")
-        
-        # 验证默认IP组
-        if DEFAULT_IP_GROUP not in ip_group_names:
-            log_error(f"默认IP组不存在: {DEFAULT_IP_GROUP}")
-            return False
-            
-        # 验证攻击类型映射中的IP组
-        if USE_TYPE_GROUPS:
-            for attack_type_id, ip_group in TYPE_GROUP_MAPPING.items():
-                if ip_group not in ip_group_names:
-                    log_error(f"攻击类型 {attack_type_id} 对应的IP组不存在: {ip_group}")
-                    return False
-        
-        log_info("IP组验证成功")
-        return True
-        
-    except Exception as e:
-        log_error(f"验证IP组异常: {str(e)}")
-        return False
+        # 第二次fork
+        pid = os.fork()
+        if pid > 0:
+            # 第二个父进程退出
+            sys.exit(0)
+    except OSError as e:
+        logger.error(f"第二次fork失败: {e}")
+        sys.exit(1)
+    
+    # 重定向标准文件描述符
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
+    with open('/dev/null', 'r') as f:
+        os.dup2(f.fileno(), sys.stdin.fileno())
+    with open('/dev/null', 'a+') as f:
+        os.dup2(f.fileno(), sys.stdout.fileno())
+    with open('/dev/null', 'a+') as f:
+        os.dup2(f.fileno(), sys.stderr.fileno())
+    
+    logger.info(f"守护进程已启动，PID: {os.getpid()}")
 
-def monitor_log_file(token, log_file):
-    """监控日志文件"""
-    log_info("监控日志文件")
-    
+def reload_config(config_file=CONFIG_FILE):
+    """重新加载配置文件"""
     try:
-        while True:
+        new_config = parse_config(config_file)
+        if new_config:
+            logger.debug("配置文件已重新加载")
+            return new_config
+    except Exception as e:
+        logger.error(f"重新加载配置文件时出错: {str(e)}")
+    
+    return None
+
+def api_monitor(config):
+    """API监控模式"""
+    # 获取配置
+    host = config.get('DEFAULT', 'SAFELINE_HOST', fallback='localhost')
+    port = config.get('DEFAULT', 'SAFELINE_PORT', fallback='9443')
+    encrypted_token = config.get('DEFAULT', 'SAFELINE_TOKEN_ENCRYPTED')
+    default_ip_group = config.get('DEFAULT', 'DEFAULT_IP_GROUP', fallback='人机验证')
+    use_type_groups = config.getboolean('DEFAULT', 'USE_TYPE_GROUPS', fallback=True)
+    query_interval = config.getint('DEFAULT', 'QUERY_INTERVAL', fallback=60)
+    max_logs = config.getint('DEFAULT', 'MAX_LOGS_PER_QUERY', fallback=100)
+    debug_mode = config.getboolean('DEFAULT', 'DEBUG_MODE', fallback=False)
+    log_retention_days = config.getint('DEFAULT', 'LOG_RETENTION_DAYS', fallback=30)
+    attack_types_filter = config.get('DEFAULT', 'ATTACK_TYPES_FILTER', fallback='').split(',')
+    attack_types_filter = [t.strip() for t in attack_types_filter if t.strip()]
+    config_reload_interval = config.getint('DEFAULT', 'CONFIG_RELOAD_INTERVAL', fallback=300)
+    
+    # 设置日志级别
+    if debug_mode:
+        logger.setLevel(logging.DEBUG)
+    
+    # 读取密钥
+    try:
+        with open(KEY_FILE, 'r') as f:
+            key = f.read().strip()
+    except Exception as e:
+        logger.error(f"读取密钥文件时出错: {str(e)}")
+        return
+    
+    # 解密令牌
+    try:
+        token = decrypt_token(encrypted_token, key)
+    except Exception as e:
+        logger.error(f"解密令牌时出错: {str(e)}")
+        return
+    
+    # 创建API实例
+    api = SafeLineAPI(host, port, token)
+    
+    # 获取类型组映射
+    type_group_mapping = {}
+    if 'TYPE_GROUP_MAPPING' in config:
+        type_group_mapping = dict(config['TYPE_GROUP_MAPPING'])
+    
+    # 创建一个集合来记录已处理过的日志ID
+    processed_log_ids = set()
+    # 设置集合最大大小，避免内存占用过大
+    max_processed_ids = 10000
+    
+    # 记录上次日志清理时间
+    last_log_cleanup = datetime.now()
+    # 记录上次配置重载时间
+    last_config_reload = datetime.now()
+    # 记录上次日志轮转检查时间
+    last_log_rotation_check = datetime.now()
+    # 记录上次攻击类型更新时间
+    last_attack_types_update = datetime.now()
+    # 记录上次缓存清理时间
+    last_cache_cleanup = datetime.now()
+    
+    # 添加信号处理
+    running = True
+    
+    def signal_handler(sig, frame):
+        nonlocal running
+        logger.info(f"收到信号 {sig}，准备退出...")
+        running = False
+    
+    # 注册信号处理器
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    logger.debug("启动API监控模式，已注册信号处理器")
+    
+    # 主循环
+    while running:
+        try:
+            # 检查是否需要重新加载配置
             current_time = datetime.now()
+            if (current_time - last_config_reload).total_seconds() >= config_reload_interval:
+                new_config = reload_config()
+                if new_config:
+                    config = new_config
+                    # 更新配置项
+                    default_ip_group = config.get('DEFAULT', 'DEFAULT_IP_GROUP', fallback='人机验证')
+                    use_type_groups = config.getboolean('DEFAULT', 'USE_TYPE_GROUPS', fallback=True)
+                    query_interval = config.getint('DEFAULT', 'QUERY_INTERVAL', fallback=60)
+                    max_logs = config.getint('DEFAULT', 'MAX_LOGS_PER_QUERY', fallback=100)
+                    debug_mode = config.getboolean('DEFAULT', 'DEBUG_MODE', fallback=False)
+                    log_retention_days = config.getint('DEFAULT', 'LOG_RETENTION_DAYS', fallback=30)
+                    attack_types_filter = config.get('DEFAULT', 'ATTACK_TYPES_FILTER', fallback='').split(',')
+                    attack_types_filter = [t.strip() for t in attack_types_filter if t.strip()]
+                    config_reload_interval = config.getint('DEFAULT', 'CONFIG_RELOAD_INTERVAL', fallback=300)
+                    
+                    # 更新类型组映射
+                    if 'TYPE_GROUP_MAPPING' in config:
+                        type_group_mapping = dict(config['TYPE_GROUP_MAPPING'])
+                    
+                    # 更新日志级别
+                    if debug_mode:
+                        logger.setLevel(logging.DEBUG)
+                    
+                last_config_reload = current_time
             
-            # 查询从上次查询到现在的日志
-            start_time = last_query_time.strftime("%Y-%m-%d %H:%M:%S")
-            end_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+            # 检查是否需要清理日志
+            if (current_time - last_log_cleanup).days >= 1:
+                logger.debug("执行定期日志清理")
+                clean_old_logs(log_dir, log_retention_days)
+                last_log_cleanup = current_time
             
-            logs = query_security_logs(token, start_time, end_time)
-            process_logs(token, logs)
+            # 检查是否需要轮转日志
+            if (current_time - last_log_rotation_check).total_seconds() >= 3600:  # 每小时检查一次
+                log_file = os.path.join(log_dir, 'auto_blocker.log')
+                if check_log_rotation(log_file):
+                    # 如果日志已轮转，需要重新设置日志处理器
+                    logger, _ = setup_logging()
+                last_log_rotation_check = current_time
             
-            # 更新上次查询时间
-            last_query_time = current_time
+            # 检查是否需要更新攻击类型
+            if (current_time - last_attack_types_update).total_seconds() >= 86400:  # 每天更新一次
+                update_attack_type_names(api)
+                last_attack_types_update = current_time
+            
+            # 检查是否需要清理缓存
+            if (current_time - last_cache_cleanup).total_seconds() >= 3600:  # 每小时清理一次
+                api.clean_cache()
+                last_cache_cleanup = current_time
+            
+            # 直接获取最新的攻击日志，不使用时间过滤
+            logs = api.get_attack_logs(max_logs)
+            
+            if logs:
+                # 处理日志
+                new_logs_count = 0
+                for log in logs:
+                    # 获取日志ID，如果没有ID则使用其他唯一标识
+                    log_id = log.get('id') or f"{log.get('src_ip')}_{log.get('timestamp')}_{log.get('attack_type')}"
+                    
+                    # 检查是否已处理过该日志
+                    if log_id in processed_log_ids:
+                        continue
+                    
+                    # 处理日志
+                    process_log_entry(log, api, default_ip_group, use_type_groups, type_group_mapping, attack_types_filter)
+                    
+                    # 将日志ID添加到已处理集合
+                    processed_log_ids.add(log_id)
+                    new_logs_count += 1
+                    
+                    # 如果集合过大，移除最早的一些ID
+                    if len(processed_log_ids) > max_processed_ids:
+                        # 移除20%的旧ID
+                        remove_count = int(max_processed_ids * 0.2)
+                        processed_log_ids = set(list(processed_log_ids)[remove_count:])
+                
+                if new_logs_count > 0:
+                    logger.debug(f"处理了 {new_logs_count} 条新的攻击日志")
             
             # 等待下一次查询
-            log_info(f"等待 {QUERY_INTERVAL} 秒后进行下一次查询")
-            time.sleep(QUERY_INTERVAL)
+            time.sleep(query_interval)
+        
+        except KeyboardInterrupt:
+            logger.info("收到中断信号，退出程序")
+            break
+        
+        except Exception as e:
+            logger.error(f"API监控时出错: {str(e)}")
+            time.sleep(query_interval)
     
-    except KeyboardInterrupt:
-        log_info("收到中断信号，退出程序")
-    except Exception as e:
-        log_error(f"主循环异常: {str(e)}")
+    logger.info("API监控已停止")
 
+# 修改main函数，使用新的日志设置
 def main():
     """主函数"""
-    log_info("启动雷池WAF自动封禁工具")
+    # 设置日志
+    global logger
+    logger, log_dir = setup_logging()
     
-    # 加载配置
-    config = load_config()
+    parser = argparse.ArgumentParser(description='SafeLine Auto Blocker')
+    
+    # 添加命令行参数
+    parser.add_argument('--api-monitor', action='store_true', help='API监控模式（默认）')
+    parser.add_argument('--process-ip', nargs=3, metavar=('IP', 'REASON', 'GROUP'), help='手动添加单个IP到指定IP组')
+    parser.add_argument('--filter-type-ids', help='根据攻击类型ID筛选IP，多个ID用逗号分隔')
+    parser.add_argument('--list-attack-types', action='store_true', help='获取并显示雷池WAF支持的攻击类型')
+    parser.add_argument('--get-logs', help='获取特定攻击类型的日志，多个ID用逗号分隔')
+    parser.add_argument('--clean-logs', action='store_true', help='立即清理过期日志文件')
+    parser.add_argument('--daemon', action='store_true', help='以守护进程模式运行（仅Linux/Unix）')
+    parser.add_argument('--version', action='version', version=f'SafeLine Auto Blocker v{VERSION}')
+    
+    args = parser.parse_args()
+    
+    # 解析配置文件
+    config = parse_config()
     if not config:
-        log_error("加载配置文件失败，使用默认配置")
-    
-    # 解密令牌
-    token = decrypt_token(SAFELINE_TOKEN_ENCRYPTED)
-    if not token:
-        log_error("API令牌为空或解密失败，请检查配置")
-        sys.exit(1)
-    
-    # 记录进程ID到文件
-    with open(os.path.join(TEMP_DIR, "safeline_auto_blocker.pid"), 'w') as f:
-        f.write(str(os.getpid()))
-    
-    # 验证IP组
-    if not verify_ip_groups(token):
-        log_error("IP组验证失败，请检查雷池WAF中是否存在配置的IP组")
-        sys.exit(1)
-    
-    # 检查命令行参数
-    if len(sys.argv) > 1:
-        # 默认模式：API监控
-        main_loop()
-
-def main_loop():
-    """主循环，定期查询安全日志并处理"""
-    log_info("启动API监控模式")
-    
-    # 解密令牌
-    token = decrypt_token(SAFELINE_TOKEN_ENCRYPTED)
-    if not token:
-        log_error("API令牌为空或解密失败，请检查配置")
         return
     
-    # 记录上次查询时间
-    last_query_time = datetime.now() - timedelta(minutes=5)
+    # 如果指定了立即清理日志
+    if args.clean_logs:
+        log_retention_days = config.getint('DEFAULT', 'LOG_RETENTION_DAYS', fallback=30)
+        logger.info(f"手动执行日志清理，保留天数: {log_retention_days}")
+        clean_old_logs(log_dir, log_retention_days)
+        return
     
-    try:
-        while True:
-            current_time = datetime.now()
-            
-            # 查询从上次查询到现在的日志
-            start_time = last_query_time.strftime("%Y-%m-%d %H:%M:%S")
-            end_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-            
-            logs = query_security_logs(token, start_time, end_time)
-            process_logs(token, logs)
-            
-            # 更新上次查询时间
-            last_query_time = current_time
-            
-            # 等待下一次查询
-            log_info(f"等待 {QUERY_INTERVAL} 秒后进行下一次查询")
-            time.sleep(QUERY_INTERVAL)
+    # 如果指定了守护进程模式
+    if args.daemon and os.name == 'posix':
+        daemonize()
     
-    except KeyboardInterrupt:
-        log_info("收到中断信号，退出程序")
-    except Exception as e:
-        log_error(f"主循环异常: {str(e)}")
+    # 如果指定了列出攻击类型
+    if args.list_attack_types:
+        # 获取配置
+        host = config.get('DEFAULT', 'SAFELINE_HOST', fallback='localhost')
+        port = config.get('DEFAULT', 'SAFELINE_PORT', fallback='9443')
+        encrypted_token = config.get('DEFAULT', 'SAFELINE_TOKEN_ENCRYPTED')
+        
+        # 读取密钥
+        try:
+            with open(KEY_FILE, 'r') as f:
+                key = f.read().strip()
+        except Exception as e:
+            logger.error(f"读取密钥文件时出错: {str(e)}")
+            return
+        
+        # 解密令牌
+        try:
+            token = decrypt_token(encrypted_token, key)
+        except Exception as e:
+            logger.error(f"解密令牌时出错: {str(e)}")
+            return
+        
+        # 创建API实例
+        api = SafeLineAPI(host, port, token)
+        
+        # 获取攻击类型
+        attack_types = api.get_attack_types()
+        
+        # 显示攻击类型
+        print("\n雷池WAF支持的攻击类型:")
+        print("ID\t名称")
+        print("-" * 20)
+        for attack_type in attack_types:
+            print(f"{attack_type['id']}\t{attack_type['name']}")
+        print()
+        
+        return
+    
+    # 如果指定了获取日志
+    if args.get_logs:
+        # 获取配置
+        host = config.get('DEFAULT', 'SAFELINE_HOST', fallback='localhost')
+        port = config.get('DEFAULT', 'SAFELINE_PORT', fallback='9443')
+        encrypted_token = config.get('DEFAULT', 'SAFELINE_TOKEN_ENCRYPTED')
+        max_logs = config.getint('DEFAULT', 'MAX_LOGS_PER_QUERY', fallback=100)
+        
+        # 读取密钥
+        try:
+            with open(KEY_FILE, 'r') as f:
+                key = f.read().strip()
+        except Exception as e:
+            logger.error(f"读取密钥文件时出错: {str(e)}")
+            return
+        
+        # 解密令牌
+        try:
+            token = decrypt_token(encrypted_token, key)
+        except Exception as e:
+            logger.error(f"解密令牌时出错: {str(e)}")
+            return
+        
+        # 创建API实例
+        api = SafeLineAPI(host, port, token)
+        
+        # 解析攻击类型ID
+        attack_type_ids = [id.strip() for id in args.get_logs.split(',') if id.strip()]
+        
+        # 获取并显示日志
+        for attack_type_id in attack_type_ids:
+            try:
+                attack_type_id = int(attack_type_id)
+                attack_type_name = get_attack_type_name(attack_type_id)
+                
+                print(f"\n获取 {attack_type_name} 类型的攻击日志:")
+                logs = api.get_attack_logs(max_logs, attack_type_id)
+                
+                if logs:
+                    print(f"找到 {len(logs)} 条日志:")
+                    for log in logs:
+                        src_ip = log.get('src_ip', 'N/A')
+                        website = log.get('website', 'N/A')
+                        timestamp = log.get('timestamp', 'N/A')
+                        print(f"IP: {src_ip}, 网站: {website}, 时间: {timestamp}")
+                else:
+                    print("未找到日志")
+            except ValueError:
+                print(f"无效的攻击类型ID: {attack_type_id}")
+        
+        return
+    
+    # 如果指定了处理单个IP
+    if args.process_ip:
+        # 获取配置
+        host = config.get('DEFAULT', 'SAFELINE_HOST', fallback='localhost')
+        port = config.get('DEFAULT', 'SAFELINE_PORT', fallback='9443')
+        encrypted_token = config.get('DEFAULT', 'SAFELINE_TOKEN_ENCRYPTED')
+        
+        # 读取密钥
+        try:
+            with open(KEY_FILE, 'r') as f:
+                key = f.read().strip()
+        except Exception as e:
+            logger.error(f"读取密钥文件时出错: {str(e)}")
+            return
+        
+        # 解密令牌
+        try:
+            token = decrypt_token(encrypted_token, key)
+        except Exception as e:
+            logger.error(f"解密令牌时出错: {str(e)}")
+            return
+        
+        # 创建API实例
+        api = SafeLineAPI(host, port, token)
+        
+        # 获取参数
+        ip, reason, group = args.process_ip
+        
+        # 添加IP到组
+        if api.add_ip_to_group(ip, reason, group):
+            print(f"成功添加IP {ip} 到 {group} 组")
+        else:
+            print(f"添加IP {ip} 到 {group} 组失败")
+        
+        return
+    
+    # 默认使用API监控模式
+    api_monitor(config)
 
 if __name__ == "__main__":
     main()
