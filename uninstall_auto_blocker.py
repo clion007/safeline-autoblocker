@@ -3,7 +3,7 @@
 
 """
 SafeLine Auto Blocker 卸载脚本
-------------------------------
+----------------------------
 用于卸载SafeLine Auto Blocker。
 
 作者: Clion Nieh
@@ -29,6 +29,35 @@ def print_banner():
     ╚═══════════════════════════════════════════════╝
     """)
 
+# 导入配置模块中的路径定义
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from config import PATHS
+except ImportError:
+    # 如果无法导入，创建一个临时的PATHS字典
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    INSTALL_DIR = '/opt/safeline/scripts'
+    CONFIG_DIR = '/etc/safeline'
+    INSTALL_LOG_DIR = '/var/log/safeline'
+    SERVICE_FILE = '/etc/systemd/system/safeline-auto-blocker.service'
+    
+    PATHS = {
+        'INSTALL_DIR': INSTALL_DIR,
+        'CONFIG_DIR': CONFIG_DIR,
+        'INSTALL_LOG_DIR': INSTALL_LOG_DIR,
+        'SERVICE_FILE': SERVICE_FILE,
+        'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'auto_blocker.conf'),
+        'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, '.key'),
+        'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'auto_blocker.conf.example'),
+        'SCRIPT_FILES': [
+            os.path.join(INSTALL_DIR, 'safeline_auto_blocker.py'),
+            os.path.join(INSTALL_DIR, 'api.py'),
+            os.path.join(INSTALL_DIR, 'config.py'),
+            os.path.join(INSTALL_DIR, 'logger.py'),
+            os.path.join(INSTALL_DIR, 'uninstall_auto_blocker.py')
+        ]
+    }
+
 def stop_service():
     """停止服务"""
     print("停止服务...")
@@ -38,7 +67,7 @@ def stop_service():
 
 def remove_service_file():
     """删除服务文件"""
-    service_file = '/etc/systemd/system/safeline_auto_blocker.service'
+    service_file = PATHS['SERVICE_FILE']
     
     if os.path.exists(service_file):
         try:
@@ -53,11 +82,13 @@ def remove_service_file():
         print(f"服务文件不存在: {service_file}")
         return True
 
-def remove_config_files():
+def remove_config():
     """删除配置文件"""
-    config_file = '/etc/safeline/auto_blocker.conf'
-    key_file = '/etc/safeline/auto_blocker.key'
-    example_file = '/etc/safeline/auto_blocker.conf.example'
+    # 修改: 使用安装路径中的配置文件和密钥文件
+    from config import PATHS
+    config_file = PATHS['INSTALL_CONFIG_FILE']
+    key_file = PATHS['INSTALL_KEY_FILE']
+    example_file = PATHS['INSTALL_CONFIG_EXAMPLE']
     
     files_removed = True
     
@@ -90,7 +121,7 @@ def remove_config_files():
 
 def remove_logs():
     """删除日志文件"""
-    log_dir = '/var/log/safeline'
+    log_dir = PATHS['INSTALL_LOG_DIR']
     
     if os.path.exists(log_dir):
         try:
@@ -106,29 +137,18 @@ def remove_logs():
 
 def remove_script():
     """删除脚本文件"""
-    script_file = '/opt/safeline/scripts/safeline_auto_blocker.py'
-    uninstall_script = '/opt/safeline/scripts/uninstall_auto_blocker.py'
+    script_files = PATHS['SCRIPT_FILES']
     
     files_removed = True
     
-    if os.path.exists(script_file):
-        try:
-            os.remove(script_file)
-            print(f"删除脚本文件: {script_file}")
-        except Exception as e:
-            print(f"删除脚本文件失败: {str(e)}")
-            files_removed = False
-    else:
-        print(f"脚本文件不存在: {script_file}")
-    
-    # 删除卸载脚本自身
-    if os.path.exists(uninstall_script) and uninstall_script != __file__:
-        try:
-            os.remove(uninstall_script)
-            print(f"删除卸载脚本: {uninstall_script}")
-        except Exception as e:
-            print(f"删除卸载脚本失败: {str(e)}")
-            files_removed = False
+    for script_file in script_files:
+        if os.path.exists(script_file) and (script_file != __file__ or os.path.basename(script_file) == 'uninstall_auto_blocker.py'):
+            try:
+                os.remove(script_file)
+                print(f"删除脚本文件: {script_file}")
+            except Exception as error:  # 修改: 使用更具描述性的变量名
+                print(f"删除脚本文件失败: {script_file}, 错误: {str(error)}")
+                files_removed = False
     
     return files_removed
 
@@ -136,10 +156,10 @@ def remove_directories():
     """删除相关目录"""
     # 需要删除的目录列表
     directories = [
-        '/opt/safeline/scripts',
-        '/var/log/safeline',
-        '/opt/safeline',
-        '/etc/safeline'
+        PATHS['INSTALL_DIR'],
+        PATHS['INSTALL_LOG_DIR'],
+        os.path.dirname(PATHS['INSTALL_DIR']),  # /opt/safeline
+        PATHS['CONFIG_DIR']
     ]
     
     all_removed = True
@@ -183,7 +203,7 @@ def main():
     service_removed = remove_service_file()
     
     # 删除配置文件
-    config_removed = remove_config_files()
+    config_removed = remove_config()
     
     # 删除脚本文件
     script_removed = remove_script()

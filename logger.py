@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+日志管理模块
+"""
+
+import os
+import sys
+import logging
+import glob
+from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
+
+# 导入路径常量
+from config import PATHS, LOG_DIR, LOG_FILE
+
+# 添加常量定义
+DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+DEFAULT_LOG_LEVEL = logging.INFO
+MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
+BACKUP_COUNT = 5
+
+class LoggerManager:
+    """日志管理类，提供统一的日志获取和管理方法"""
+    
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
+        """获取单例实例"""
+        if cls._instance is None:
+            cls._instance = cls(log_dir, log_level, use_rotating_handler, log_format)
+        return cls._instance
+    
+    def __init__(self, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
+        """初始化日志管理器"""
+        # 修改: 根据环境选择正确的日志目录
+        from config import PATHS, is_installed_environment
+        if log_dir is None:
+            if is_installed_environment():
+                self.log_dir = PATHS['INSTALL_LOG_DIR']
+                self.log_file = PATHS['INSTALL_LOG_FILE']
+            else:
+                self.log_dir = LOG_DIR
+                self.log_file = LOG_FILE
+        else:
+            self.log_dir = log_dir
+            self.log_file = os.path.join(self.log_dir, 'auto_blocker.log')
+        
+        self.log_level = log_level or DEFAULT_LOG_LEVEL
+        self.log_format = log_format or DEFAULT_LOG_FORMAT
+        self.use_rotating_handler = use_rotating_handler
+        self.logger = self._setup_logger()
+    
+    def _setup_logger(self):
+        """设置日志记录器"""
+        # 确保日志目录存在
+        os.makedirs(self.log_dir, exist_ok=True)
+        
+        try:
+            logger = logging.getLogger('auto_blocker')
+            logger.setLevel(self.log_level)
+            
+            # 清除现有处理器避免重复
+            logger.handlers.clear()
+            
+            # 控制台处理器
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(self.log_level)
+            
+            # 文件处理器
+            if self.use_rotating_handler:
+                file_handler = RotatingFileHandler(
+                    self.log_file,  # 使用实例变量而不是全局常量
+                    maxBytes=MAX_LOG_SIZE,
+                    backupCount=BACKUP_COUNT,
+                    encoding='utf-8'
+                )
+            else:
+                file_handler = logging.FileHandler(self.log_file, encoding='utf-8')
+            
+            file_handler.setLevel(self.log_level)
+            
+            # 创建格式化器
+            formatter = logging.Formatter(self.log_format)
+            
+            # 设置处理器
+            console_handler.setFormatter(formatter)
+            file_handler.setFormatter(formatter)
+            
+            # 添加处理器
+            logger.addHandler(console_handler)
+            logger.addHandler(file_handler)
+            
+            return logger
+            
+        except Exception as error:
+            print(f"设置日志记录时出错: {str(error)}")
+            logging.basicConfig(level=self.log_level, format=self.log_format)
+            return logging.getLogger('auto_blocker')
+    
+    def get_logger(self):
+        """获取日志记录器"""
+        return self.logger
+    
+    def get_log_dir(self):
+        """获取日志目录"""
+        return self.log_dir
+    
+    def clean_old_logs(self, retention_days):
+        """清理旧日志文件"""
+        try:
+            # 计算截止日期
+            cutoff_date = datetime.now() - timedelta(days=retention_days)
+            
+            # 查找所有日志文件
+            log_pattern = os.path.join(self.log_dir, "*.log*")
+            log_files = glob.glob(log_pattern)
+            
+            # 统计删除的文件数量
+            deleted_count = 0
+            
+            for log_file in log_files:
+                # 获取文件修改时间
+                file_time = datetime.fromtimestamp(os.path.getmtime(log_file))
+                
+                # 如果文件早于截止日期，则删除
+                if file_time < cutoff_date:
+                    os.remove(log_file)
+                    deleted_count += 1
+            
+            if deleted_count > 0:
+                self.logger.info(f"已清理 {deleted_count} 个过期日志文件")
+        except Exception as error:
+            self.logger.error(f"清理旧日志文件时出错: {str(error)}")
+
+# 创建全局日志管理器实例
+logger_manager = LoggerManager.get_instance()
+
+def clean_old_logs(retention_days):
+    """清理旧日志文件（兼容旧代码）"""
+    logger_manager.clean_old_logs(retention_days)
