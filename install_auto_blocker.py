@@ -34,17 +34,6 @@ def print_banner():
     ╚═══════════════════════════════════════════════╝
     """)
 
-def check_dependencies():
-    """检查依赖"""
-    try:
-        import requests
-        from cryptography.fernet import Fernet
-        return True
-    except ImportError as e:
-        print(f"缺少依赖: {str(e)}")
-        print("请安装所需依赖: pip3 install requests cryptography")
-        return False
-
 def create_directories():
     """创建必要的目录"""
     directories = [
@@ -232,6 +221,36 @@ def download_main_script():
         print(f"下载脚本文件失败: {str(e)}")
         return False
 
+def download_additional_files():
+    """下载配置示例文件和卸载脚本文件"""
+    files_to_download = [
+        {
+            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'path': '/etc/safeline/auto_blocker.conf.example'
+        },
+        {
+            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'path': '/opt/safeline/scripts/uninstall_auto_blocker.py'
+        }
+    ]
+    
+    success = True
+    for file_info in files_to_download:
+        try:
+            print(f"正在下载 {os.path.basename(file_info['path'])}...")
+            urllib.request.urlretrieve(file_info['url'], file_info['path'])
+            
+            # 为卸载脚本添加执行权限
+            if file_info['path'].endswith('.sh'):
+                os.chmod(file_info['path'], 0o755)
+                
+            print(f"下载文件: {file_info['path']}")
+        except Exception as e:
+            print(f"下载文件 {file_info['path']} 失败: {str(e)}")
+            success = False
+    
+    return success
+
 def start_service():
     """启动服务并检查状态"""
     try:
@@ -258,21 +277,17 @@ def main():
     
     # 检查操作系统类型
     if os.name == 'nt':
-        print("警告: 此脚本设计用于Linux系统，在Windows上运行可能会出现问题")
-        proceed = input("是否继续? (y/n) [n]: ").strip().lower() == 'y'
-        if not proceed:
-            print("安装已取消")
-            return
+        print("错误: 此脚本设计用于Linux系统，安装已取消")
+        return
     else:
         # 在Linux系统上检查root权限
         if os.geteuid() != 0:
             print("错误: 请使用root权限运行此脚本")
             return
     
-    # 检查依赖
-    print("检查依赖...")
-    if not check_dependencies():
-        print("依赖检查失败，安装终止")
+    # 创建必要的目录
+    if not create_directories():
+        print("创建目录失败，安装终止")
         return
     
     # 下载主监控脚本
@@ -280,9 +295,9 @@ def main():
         print("下载主监控脚本失败，安装终止")
         return
     
-    # 创建必要的目录
-    if not create_directories():
-        return
+    # 下载配置示例文件和卸载脚本
+    print("\n下载配置示例文件和卸载脚本...")
+    download_additional_files()
     
     # 生成密钥
     key = generate_key()
@@ -307,6 +322,7 @@ def main():
     print("  停止服务: systemctl stop safeline_auto_blocker")
     print("  查看状态: systemctl status safeline_auto_blocker")
     print("  查看日志: journalctl -u safeline_auto_blocker -f")
+    print("\n如需卸载，请运行: python3 /opt/safeline/scripts/uninstall_auto_blocker.py")
 
 if __name__ == '__main__':
     main()
