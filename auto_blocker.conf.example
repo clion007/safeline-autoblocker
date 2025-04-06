@@ -55,3 +55,6 @@ LOG_RETENTION_DAYS = 30
 6 = 人机验证   # 反序列化
 10 = 人机验证  # 文件上传
 21 = 人机验证  # 扫描器
+
+# 配置文件重载间隔（秒）
+CONFIG_RELOAD_INTERVAL = 300

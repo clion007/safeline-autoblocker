@@ -596,6 +596,9 @@ def api_monitor(config):
     # 主循环
     while running:
         try:
+            # 记录循环开始时间
+            loop_start_time = time.time()
+            
             # 检查是否需要重新加载配置
             current_time = datetime.now()
             if (current_time - last_config_reload).total_seconds() >= config_reload_interval:
