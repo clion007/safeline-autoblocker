@@ -677,8 +677,21 @@ def api_monitor(config):
                 if new_logs_count > 0:
                     logger.debug(f"处理了 {new_logs_count} 条新的攻击日志")
             
+            # 计算本次循环实际耗时
+            elapsed_time = time.time() - loop_start_time
+            
+            # 计算需要等待的时间，确保两次查询之间的间隔不小于query_interval
+            wait_time = max(0, query_interval - elapsed_time)
+            
+            if elapsed_time > query_interval:
+                logger.warning(f"处理日志耗时 {elapsed_time:.2f} 秒，超过了设定的查询间隔 {query_interval} 秒")
+            
             # 等待下一次查询
-            time.sleep(query_interval)
+            if wait_time > 0:
+                time.sleep(wait_time)
+            else:
+                # 如果处理时间已经超过了间隔时间，立即进行下一次循环，但先让出CPU
+                time.sleep(0.1)
         
         except KeyboardInterrupt:
             logger.info("收到中断信号，退出程序")
