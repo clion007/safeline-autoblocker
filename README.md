@@ -399,7 +399,7 @@ sudo rm /opt/safeline/scripts/safeline_auto_blocker.py
 
 ## 许可证
 
-本项目采用 MIT 许可证
+本项目采用MIT许可证。详情请参阅[LICENSE](LICENSE)文件。
 
 ## 作者
 
@@ -408,4 +408,5 @@ Clion Nieh - - EMAIL: <clion007@126.com>
 ## 鸣谢
 
 - 雷池WAF团队提供的API支持
+- 咖啡星人k博客文章提供的指导和帮助
 - 所有为本项目提供反馈和建议的用户
