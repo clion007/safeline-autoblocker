@@ -101,6 +101,10 @@ def download_module_files(paths):
         {
             'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
+        },
+        {
+            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
     
