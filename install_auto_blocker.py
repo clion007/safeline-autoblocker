@@ -12,13 +12,13 @@ SafeLine Auto Blocker 安装脚本
 许可证: MIT
 """
 
-# 在导入部分添加urllib.request
 import os
 import sys
 import argparse
 import configparser
 import getpass
 import urllib.request
+import shutil
 from cryptography.fernet import Fernet
 
 def print_banner():
@@ -232,14 +232,47 @@ def download_main_script():
         print(f"下载脚本文件失败: {str(e)}")
         return False
 
+def start_service():
+    """启动服务并检查状态"""
+    try:
+        # 启动服务
+        os.system('systemctl start safeline_auto_blocker')
+        
+        # 检查服务状态
+        status = os.system('systemctl is-active --quiet safeline_auto_blocker')
+        if status == 0:
+            print("服务启动成功")
+            return True
+        else:
+            print("服务启动失败，请检查日志获取详细信息")
+            print("可使用命令: journalctl -u safeline_auto_blocker -n 50")
+            return False
+    except Exception as e:
+        print(f"启动服务时出错: {str(e)}")
+        return False
+
 def main():
     """主函数"""
     # 打印横幅
     print_banner()
     
-    # 检查是否为root用户
-    if os.geteuid() != 0:
-        print("错误: 请使用root权限运行此脚本")
+    # 检查操作系统类型
+    if os.name == 'nt':
+        print("警告: 此脚本设计用于Linux系统，在Windows上运行可能会出现问题")
+        proceed = input("是否继续? (y/n) [n]: ").strip().lower() == 'y'
+        if not proceed:
+            print("安装已取消")
+            return
+    else:
+        # 在Linux系统上检查root权限
+        if os.geteuid() != 0:
+            print("错误: 请使用root权限运行此脚本")
+            return
+    
+    # 检查依赖
+    print("检查依赖...")
+    if not check_dependencies():
+        print("依赖检查失败，安装终止")
         return
     
     # 下载主监控脚本
