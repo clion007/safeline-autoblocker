@@ -154,7 +154,7 @@ def generate_key(paths):
         return None
 
 # 在create_config函数中添加日志保留天数的配置选项
-def create_config(paths):
+def create_config(paths, key):
     """创建配置文件"""
     # 使用安装路径中的配置文件
     config_file = paths['INSTALL_CONFIG_FILE']
@@ -299,6 +299,107 @@ CONFIG_RELOAD_INTERVAL = 300
         print(f"创建配置文件失败: {str(error)}")
         return False
 
+# 修改下载主脚本函数，使用更稳定的镜像
+def download_main_script(paths):
+    """下载主监控脚本"""
+    script_dir = paths['INSTALL_DIR']
+    script_path = os.path.join(script_dir, 'safeline_auto_blocker.py')
+    
+    # 确保目录存在
+    if not os.path.exists(script_dir):
+        try:
+            os.makedirs(script_dir, exist_ok=True)
+            print(f"创建目录: {script_dir}")
+        except Exception as error:
+            print(f"创建目录失败: {str(error)}")
+            return False
+    
+    # 下载脚本
+    try:
+        print("正在下载主监控脚本...")
+        # 使用更稳定的镜像
+        urllib.request.urlretrieve(
+            'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py',
+            script_path
+        )
+        os.chmod(script_path, 0o755)  # 添加执行权限
+        print(f"下载脚本文件: {script_path}")
+        return True
+    except Exception as error:
+        print(f"下载脚本文件失败: {str(error)}")
+        return False
+
+# 修改下载模块文件函数，使用更稳定的镜像
+def download_module_files(paths):
+    """下载模块文件"""
+    module_files = [
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/api.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
+        },
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/config.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
+        },
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/logger.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
+        },
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
+        }
+    ]
+    
+    success = True
+    for file_info in files_to_download:
+        try:
+            print(f"正在下载 {os.path.basename(file_info['path'])}...")
+            urllib.request.urlretrieve(file_info['url'], file_info['path'])
+            
+            # 为卸载脚本添加执行权限
+            if file_info['path'].endswith('.sh'):
+                os.chmod(file_info['path'], 0o755)
+                
+            print(f"下载文件: {file_info['path']}")
+        except Exception as error:
+            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
+            success = False
+    
+    return success
+
+# 修改下载附加文件函数，使用更稳定的镜像
+def download_additional_files(paths):
+    """下载配置示例文件和卸载脚本文件"""
+    files_to_download = [
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'path': paths['INSTALL_CONFIG_EXAMPLE']
+        },
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
+        }
+    ]
+    
+    success = True
+    for file_info in files_to_download:
+        try:
+            print(f"正在下载 {os.path.basename(file_info['path'])}...")
+            urllib.request.urlretrieve(file_info['url'], file_info['path'])
+            
+            # 为卸载脚本添加执行权限
+            if file_info['path'].endswith('.sh'):
+                os.chmod(file_info['path'], 0o755)
+                
+            print(f"下载文件: {file_info['path']}")
+        except Exception as error:
+            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
+            success = False
+    
+    return success
+
+# 修复服务名称不一致的问题
 def create_service(paths):
     """创建systemd服务"""
     service_file = paths['SERVICE_FILE']
@@ -325,91 +426,87 @@ WantedBy=multi-user.target
         # 重新加载systemd配置
         os.system('systemctl daemon-reload')
         
-        # 启用服务
-        os.system('systemctl enable safeline_auto_blocker')
+        # 修正服务名称
+        os.system('systemctl enable safeline-auto-blocker')
         
         return True
     except Exception as e:
         print(f"创建服务文件失败: {str(e)}")
         return False
 
-def download_main_script(paths):
-    """下载主监控脚本"""
-    script_dir = paths['INSTALL_DIR']
-    script_path = os.path.join(script_dir, 'safeline_auto_blocker.py')
-    
-    # 确保目录存在
-    if not os.path.exists(script_dir):
-        try:
-            os.makedirs(script_dir, exist_ok=True)
-            print(f"创建目录: {script_dir}")
-        except Exception as error:
-            print(f"创建目录失败: {str(error)}")
-            return False
-    
-    # 下载脚本
-    try:
-        print("正在下载主监控脚本...")
-        urllib.request.urlretrieve(
-            'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py',
-            script_path
-        )
-        os.chmod(script_path, 0o755)  # 添加执行权限
-        print(f"下载脚本文件: {script_path}")
-        return True
-    except Exception as error:
-        print(f"下载脚本文件失败: {str(error)}")
-        return False
-
-def download_additional_files(paths):
-    """下载配置示例文件和卸载脚本文件"""
-    files_to_download = [
-        {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
-            'path': paths['INSTALL_CONFIG_EXAMPLE']
-        },
-        {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
-            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
-        }
-    ]
-    
-    success = True
-    for file_info in files_to_download:
-        try:
-            print(f"正在下载 {os.path.basename(file_info['path'])}...")
-            urllib.request.urlretrieve(file_info['url'], file_info['path'])
-            
-            # 为卸载脚本添加执行权限
-            if file_info['path'].endswith('.sh'):
-                os.chmod(file_info['path'], 0o755)
-                
-            print(f"下载文件: {file_info['path']}")
-        except Exception as error:
-            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
-            success = False
-    
-    return success
-
+# 修复服务启动函数中的服务名称
 def start_service():
     """启动服务并检查状态"""
     try:
         # 启动服务
-        os.system('systemctl start safeline_auto_blocker')
+        os.system('systemctl start safeline-auto-blocker')
         
         # 检查服务状态
-        status = os.system('systemctl is-active --quiet safeline_auto_blocker')
+        status = os.system('systemctl is-active --quiet safeline-auto-blocker')
         if status == 0:
             print("服务启动成功")
             return True
         else:
             print("服务启动失败，请检查日志获取详细信息")
-            print("可使用命令: journalctl -u safeline_auto_blocker -n 50")
+            print("可使用命令: journalctl -u safeline-auto-blocker -n 50")
             return False
     except Exception as error:
         print(f"启动服务时出错: {str(error)}")
         return False
 
+# 修复清理函数中的错误处理
+def cleanup_files(paths):
+    """清理已安装的文件（回滚操作）"""
+    print("正在清理已安装的文件...")
+    
+    # 禁用服务
+    try:
+        os.system('systemctl disable safeline-auto-blocker')
+        print("禁用服务")
+    except Exception as error:
+        print(f"禁用服务失败: {str(error)}")
+    
+    # 删除脚本文件
+    for script_file in paths['SCRIPT_FILES']:
+        if os.path.exists(script_file):
+            try:
+                os.remove(script_file)
+                print(f"删除文件: {script_file}")
+            except Exception as error:
+                print(f"删除文件 {script_file} 失败: {str(error)}")
+    
+    # 删除配置文件
+    config_file = paths['INSTALL_CONFIG_FILE']
+    if os.path.exists(config_file):
+        try:
+            os.remove(config_file)
+            print(f"删除文件: {config_file}")
+        except Exception as error:
+            print(f"删除文件 {config_file} 失败: {str(error)}")
+    
+    # 删除密钥文件
+    key_file = paths['INSTALL_KEY_FILE']
+    if os.path.exists(key_file):
+        try:
+            os.remove(key_file)
+            print(f"删除文件: {key_file}")
+        except Exception as error:
+            print(f"删除文件 {key_file} 失败: {str(error)}")
+    
+    # 删除服务文件
+    service_file = paths['SERVICE_FILE']
+    if os.path.exists(service_file):
+        try:
+            os.remove(service_file)
+            print(f"删除文件: {service_file}")
+            # 重新加载systemd配置
+            os.system('systemctl daemon-reload')
+        except Exception as error:
+            print(f"删除文件 {service_file} 失败: {str(error)}")
+    
+    print("清理完成，安装已回滚")
+
+# 修改主函数中的服务名称提示
 def main():
     """主函数"""
     print_banner()
@@ -417,6 +514,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='SafeLine Auto Blocker 安装程序')
     parser.add_argument('--offline', action='store_true', help='离线安装模式')
+    parser.add_argument('--verify-config', action='store_true', help='验证配置文件')
     args = parser.parse_args()
     
     # 创建目录
@@ -436,31 +534,38 @@ def main():
         
         # 调用下载模块文件函数
         if not download_module_files(PATHS):
-            print("下载模块文件失败，安装可能不完整")
-            # 继续安装，因为主脚本已下载成功
+            print("下载模块文件失败，安装中止")
+            # 回滚已下载的文件
+            cleanup_files(PATHS)
+            return False
     
     # 下载其他文件
     if not args.offline:
         if not download_additional_files(PATHS):
-            print("下载附加文件失败，安装可能不完整")
-            # 继续安装，因为主要文件已下载成功
+            print("下载附加文件失败，安装中止")
+            # 回滚已下载的文件
+            cleanup_files(PATHS)
+            return False
 
     # 生成密钥
     key = generate_key(PATHS)
     if not key:
-        return
+        cleanup_files(PATHS)
+        return False
     
     # 创建配置文件
-    if not create_config(key, PATHS):
-        return
+    if not create_config(PATHS, key):
+        cleanup_files(PATHS)
+        return False
     
     # 创建服务
     if not create_service(PATHS):
-        return
+        cleanup_files(PATHS)
+        return False
     
     # 启动服务
     if not start_service():
-        return
+        print("服务启动失败，但安装已完成。您可以稍后手动启动服务。")
     
     print("\n安装完成！")
     print("您可以使用以下命令管理服务:")
@@ -469,18 +574,8 @@ def main():
     print("  查看状态: systemctl status safeline_auto_blocker")
     print("  查看日志: journalctl -u safeline_auto_blocker -f")
     print("\n如需卸载，请运行: python3 /opt/safeline/scripts/uninstall_auto_blocker.py")
+    
+    return True
 
 if __name__ == '__main__':
     main()
-
-# 安装后验证配置
-if args.verify_config:
-    from config import parse_config, validate_config
-    # 修改: 直接使用安装路径中的配置文件
-    config_file = PATHS['INSTALL_CONFIG_FILE']
-    config = parse_config(config_file)
-    if config and validate_config(config):
-        print("配置验证通过")
-    else:
-        print("配置验证失败")
-        
