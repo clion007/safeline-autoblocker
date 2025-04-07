@@ -150,7 +150,7 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    url = 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
     if download_file(url, script_path):
         os.chmod(script_path, 0o755)  # 添加执行权限
         print(f"下载脚本文件: {script_path}")
@@ -162,19 +162,19 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
@@ -190,11 +190,11 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
         }
     ]
@@ -404,18 +404,12 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    try:
-        print("正在下载主监控脚本...")
-        # 使用更稳定的镜像
-        urllib.request.urlretrieve(
-            'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py',
-            script_path
-        )
+    url = 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    if download_file(url, script_path):
         os.chmod(script_path, 0o755)  # 添加执行权限
         print(f"下载脚本文件: {script_path}")
         return True
-    except Exception as error:
-        print(f"下载脚本文件失败: {str(error)}")
+    else:
         return False
 
 # 修改下载模块文件函数，使用更稳定的镜像
@@ -423,19 +417,19 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
@@ -457,11 +451,11 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
         }
     ]
