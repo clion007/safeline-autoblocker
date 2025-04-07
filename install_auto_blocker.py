@@ -343,7 +343,7 @@ def create_config_file(paths, token, key):
     
     # 创建配置文件
     try:
-        with open(config_file, 'w') as config_file_handle:  # 修改: f -> config_file_handle
+        with open(config_file, 'w') as config_file_handle:
             config_file_handle.write(f"""[DEFAULT]
 # 雷池WAF主机地址和端口
 SAFELINE_HOST = localhost
@@ -380,8 +380,8 @@ CONFIG_RELOAD_INTERVAL = 300
 # 攻击类型到IP组的映射
 # 格式: 攻击类型ID = IP组名称
 # 示例:
-# 1 = 黑名单
-# 2 = 人机验证
+# 1 = "黑名单"
+# 2 = "人机验证"
 """)
         
         # 设置权限

@@ -208,7 +208,7 @@ sudo rm /opt/safeline/scripts/safeline_auto_blocker.py
    
 - 检查配置文件是否正确
 - 检查API令牌是否有效
-- 查看服务日志：`sudo journalctl -u safeline_auto_blocker -n 50`
+- 查看服务日志：`sudo journalctl -u safeline-auto-blocker -n 50`
 
 2. 无法添加IP到IP组
    
