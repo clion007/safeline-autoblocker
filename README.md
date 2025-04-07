@@ -159,16 +159,10 @@ sudo python3 /opt/safeline/scripts/safeline-autoblocker.py
 
 ### 自动卸载
 
-1. 下载卸载脚本：
+运行卸载脚本：
 
 ```bash
-wget https://gitee.com/clion007/safeline-autoblocker/raw/main/uninstall-autoblocker.py
-```
-
-2. 运行卸载脚本：
-
-```bash
-sudo python3 uninstall-autoblocker.py
+sudo python3 /opt/safeline/scripts/uninstall-autoblocker.py
 ```
 
 ### 手动卸载
@@ -188,21 +182,26 @@ sudo systemctl disable safeline-autoblocker
 3. 删除systemd服务文件：
 
 ```bash
-sudo rm /etc/systemd/system/safeline-autoblocker.service
+sudo rm -f /etc/systemd/system/safeline-autoblocker.service
 sudo systemctl daemon-reload
 ```
 
-4. 删除配置文件和密钥：
+4. 删除配置文件：
 
 ```bash
-sudo rm /etc/safeline/safeline-autoblocker.conf
-sudo rm /etc/safeline/safeline-autoblocker.key
+sudo rm -rf /etc/safeline
 ```
 
 5. 删除脚本文件：
 
 ```bash
-sudo rm /opt/safeline/scripts/safeline-autoblocker.py
+sudo rm -rf /opt/safeline
+```
+
+6. 删除日志文件：
+
+```bash
+sudo rm -rf /var/log/safeline
 ```
 
 ## 故障排除

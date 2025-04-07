@@ -65,6 +65,43 @@ def print_banner():
     ╚═══════════════════════════════════════════════╝
     """)
 
+def print_step(step_number, total_steps, step_name):
+    """打印安装步骤"""
+    print(f"\n[{step_number}/{total_steps}] {step_name}")
+    print("=" * 50)
+
+def get_user_input(prompt, default=None, password=False, choices=None):
+    """获取用户输入，带有提示和验证"""
+    if default is not None:
+        if password:
+            prompt = f"{prompt} [隐藏]: "
+        else:
+            prompt = f"{prompt} [{default}]: "
+    else:
+        prompt = f"{prompt}: "
+    
+    while True:
+        if password:
+            value = getpass.getpass(prompt).strip()
+        else:
+            value = input(prompt).strip()
+        
+        # 使用默认值
+        if value == "" and default is not None:
+            return default
+            
+        # 验证选择
+        if choices and value.lower() not in choices:
+            print(f"请输入有效的选项: {', '.join(choices)}")
+            continue
+            
+        # 验证非空
+        if value == "" and default is None:
+            print("此项不能为空，请重新输入")
+            continue
+            
+        return value
+
 def create_directories(paths):
     """创建必要的目录"""
     directories = [
@@ -252,22 +289,24 @@ def create_config(paths, key):
     example_file = paths['INSTALL_CONFIG_EXAMPLE']
     
     # 获取用户输入
-    print("\n请输入以下配置信息:")
-    host = input("雷池API地址 [localhost]: ").strip() or 'localhost'
-    port = input("雷池API端口 [9443]: ").strip() or '9443'
-    token = getpass.getpass("雷池API令牌: ").strip()
-    default_ip_group = input("默认IP组名称 [人机验证]: ").strip() or '人机验证'
+    print_step(4, 7, "配置信息设置")
+    print("请输入以下配置信息:")
     
-    use_type_groups = input("是否为不同攻击类型配置不同IP组? (y/n) [y]: ").strip().lower() != 'n'
+    host = get_user_input("雷池API地址", default='localhost')
+    port = get_user_input("雷池API端口", default='9443')
+    token = get_user_input("雷池API令牌", password=True)
+    default_ip_group = get_user_input("默认IP组名称", default='人机验证')
     
-    attack_types_filter = input("攻击类型过滤（多个ID用逗号分隔，留空监控所有类型）: ").strip()
+    use_type_groups = get_user_input("是否为不同攻击类型配置不同IP组? (y/n)", default='y', choices=['y', 'n']) == 'y'
     
-    query_interval = input("API查询间隔（秒）[60]: ").strip() or '60'
-    max_logs = input("每次查询的最大日志数量 [100]: ").strip() or '100'
-    debug_mode = input("是否启用调试模式? (y/n) [n]: ").strip().lower() == 'y'
+    attack_types_filter = get_user_input("攻击类型过滤（多个ID用逗号分隔，留空监控所有类型）", default='')
+    
+    query_interval = get_user_input("API查询间隔（秒）", default='60')
+    max_logs = get_user_input("每次查询的最大日志数量", default='100')
+    debug_mode = get_user_input("是否启用调试模式? (y/n)", default='n', choices=['y', 'n']) == 'y'
     
     # 添加日志保留天数配置
-    log_retention_days = input("日志保留天数（0表示永久保留）[30]: ").strip() or '30'
+    log_retention_days = get_user_input("日志保留天数（0表示永久保留）", default='30')
     
     # 加密令牌
     f = Fernet(key.encode())
@@ -589,11 +628,13 @@ def main():
     args = parser.parse_args()
     
     # 创建目录
+    print_step(1, 7, "创建必要目录")
     if not create_directories(PATHS):
         print("创建目录失败，安装中止")
         return False
     
     # 下载或复制脚本文件
+    print_step(2, 7, "获取程序文件")
     if args.offline:
         if not copy_script(PATHS):
             print("复制脚本文件失败，安装中止")
@@ -611,6 +652,7 @@ def main():
             return False
     
     # 下载其他文件
+    print_step(3, 7, "获取附加文件")
     if not args.offline:
         if not download_additional_files(PATHS):
             print("下载附加文件失败，安装中止")
@@ -621,30 +663,43 @@ def main():
     # 生成密钥
     key = generate_key(PATHS)
     if not key:
+        print("生成密钥失败，安装中止")
         cleanup_files(PATHS)
         return False
     
     # 创建配置文件
     if not create_config(PATHS, key):
+        print("创建配置文件失败，安装中止")
         cleanup_files(PATHS)
         return False
     
     # 创建服务
+    print_step(5, 7, "创建系统服务")
     if not create_service(PATHS):
+        print("创建服务失败，安装中止")
         cleanup_files(PATHS)
         return False
     
     # 启动服务
+    print_step(6, 7, "启动服务")
     if not start_service():
-        print("服务启动失败，但安装已完成。您可以稍后手动启动服务。")
+        print("启动服务失败，安装中止")
+        cleanup_files(PATHS)
+        return False
     
-    print("\n安装完成！")
-    print("您可以使用以下命令管理服务:")
-    print("  启动服务: systemctl start safeline-auto-blocker")  # 修复：使用连字符而非下划线
-    print("  停止服务: systemctl stop safeline-auto-blocker")   # 修复：使用连字符而非下划线
-    print("  查看状态: systemctl status safeline-auto-blocker") # 修复：使用连字符而非下划线
-    print("  查看日志: journalctl -u safeline-auto-blocker -f") # 修复：使用连字符而非下划线
-    print("\n如需卸载，请运行: python3 /opt/safeline/scripts/uninstall_auto_blocker.py")
+    # 安装完成
+    print_step(7, 7, "安装完成")
+    print("""
+    ✓ SafeLine AutoBlocker 已成功安装!
+    
+    您可以使用以下命令管理服务:
+      启动服务: systemctl start safeline-autoblocker
+      停止服务: systemctl stop safeline-autoblocker
+      查看状态: systemctl status safeline-autoblocker
+      查看日志: journalctl -u safeline-autoblocker -f
+      
+    配置文件位置: /etc/safeline/safeline-autoblocker.conf
+    """)
     
     return True
 

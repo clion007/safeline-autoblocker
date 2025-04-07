@@ -14,6 +14,7 @@ SafeLine AutoBlocker 卸载脚本
 
 import os
 import sys
+import time
 import shutil
 
 def print_banner():
@@ -58,8 +59,28 @@ except ImportError:
         ]
     }
 
+def check_service_exists():
+    """检查服务是否存在"""
+    status = os.system('systemctl list-unit-files | grep -q safeline-autoblocker.service')
+    return status == 0
+
+def check_service_running():
+    """检查服务是否正在运行"""
+    status = os.system('systemctl is-active --quiet safeline-autoblocker')
+    return status == 0
+
 def stop_service():
     """停止服务（增加重试机制）"""
+    # 先检查服务是否存在
+    if not check_service_exists():
+        print("服务不存在，跳过停止服务步骤")
+        return True
+    
+    # 检查服务是否在运行
+    if not check_service_running():
+        print("服务已经停止，跳过停止服务步骤")
+        return True
+    
     max_retries = 3
     for attempt in range(max_retries):
         print(f"停止服务尝试 ({attempt + 1}/{max_retries})...")
@@ -67,13 +88,14 @@ def stop_service():
         os.system('systemctl disable safeline-autoblocker')
         
         # 验证服务状态
-        status = os.system('systemctl is-active --quiet safeline-autoblocker')
-        if status != 0:
+        if not check_service_running():
+            print("服务已成功停止")
             return True
         time.sleep(2)
     
-    print("错误: 无法停止服务")
-    return False
+    print("警告: 无法完全停止服务，将尝试强制删除相关文件")
+    # 即使服务停止失败，也返回True以继续卸载流程
+    return True
 
 def remove_service_file():
     """删除服务文件"""
@@ -94,8 +116,7 @@ def remove_service_file():
 
 def remove_config():
     """删除配置文件（增加隐藏文件清理）"""
-    # 修改: 使用安装路径中的配置文件和密钥文件
-    from config import PATHS
+    # 不再从config模块导入PATHS，直接使用已加载的PATHS
     config_file = PATHS['INSTALL_CONFIG_FILE']
     key_file = PATHS['INSTALL_KEY_FILE']
     example_file = PATHS['INSTALL_CONFIG_EXAMPLE']
@@ -159,8 +180,6 @@ def remove_logs():
     else:
         print(f"日志目录不存在: {log_dir}")
         return True
-
-import time
 
 def remove_directories():
     """删除相关目录"""
@@ -228,8 +247,15 @@ def main():
         print("卸载已取消")
         return
     
+    print("\n开始卸载过程...")
+    
     # 停止服务
-    stop_service()
+    service_stopped = stop_service()
+    if not service_stopped:
+        force_continue = input("服务停止失败，是否继续卸载? (y/n): ").strip().lower()
+        if force_continue != 'y':
+            print("卸载已取消")
+            return
     
     # 删除服务文件
     service_removed = remove_service_file()
@@ -245,19 +271,20 @@ def main():
     
     # 最后删除相关目录
     dirs_removed = remove_directories()
-        
+    
     # 卸载结果反馈
     print("\n卸载结果:")
+    print(f"服务停止: {'成功' if service_stopped else '失败但继续'}")
     print(f"服务文件: {'已删除' if service_removed else '删除失败'}")
     print(f"配置文件: {'已删除' if config_removed else '删除失败'}")
     print(f"脚本文件: {'已删除' if script_removed else '删除失败'}")
     print(f"日志文件: {'已删除' if logs_removed else '删除失败'}")
     print(f"相关目录: {'已清理' if dirs_removed else '部分目录未清理'}")
     
-    if service_removed and config_removed and script_removed and logs_removed:
-        print("\n卸载完成！所有组件已成功删除。")
+    if service_removed and config_removed and script_removed and logs_removed and dirs_removed:
+        print("\n✓ 卸载完成！所有组件已成功删除。")
     else:
-        print("\n卸载完成，但部分组件删除失败，请检查上述信息。")
+        print("\n⚠ 卸载完成，但部分组件删除失败，请检查上述信息。")
 
 if __name__ == '__main__':
     main()
