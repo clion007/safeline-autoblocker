@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-SafeLine Auto Blocker
+SafeLine AutoBlocker
 --------------------
 自动监控雷池WAF攻击日志并封禁攻击IP。
 
@@ -16,10 +16,13 @@ import os
 import sys
 import time
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 导入自定义模块
-from config import parse_config, PATHS, get_config_values, get_effective_config_file, validate_config
+from config import (
+    parse_config, validate_config, get_config_values, 
+    CONFIG_FILE, LOG_DIR, LOG_FILE, VERSION
+)
 from api import SafeLineAPI, process_log_entry, get_attack_type_name, create_api_instance
 from logger import clean_old_logs, logger_manager
 
@@ -27,13 +30,9 @@ from logger import clean_old_logs, logger_manager
 logger = logger_manager.get_logger()
 log_dir = logger_manager.get_log_dir()
 
-# 添加版本常量
-VERSION = "1.2.0"
-
 # 定义时间间隔常量
 CACHE_CLEAN_INTERVAL = 3600  # 缓存清理间隔，1小时
 LOG_CLEAN_INTERVAL = 86400   # 日志清理间隔，1天
-CONFIG_RELOAD_INTERVAL = 300 # 配置重载间隔，5分钟
 
 # 添加辅助函数来处理日志记录器和日志目录
 def get_logger_and_dir(logger_instance=None, log_directory=None):
@@ -103,20 +102,17 @@ def api_monitor(config, logger_instance=None, log_directory=None, existing_api=N
     # 获取配置值
     config_values = get_config_values(config)
     
-    # 使用已有API实例或创建新的
-    api = existing_api
+    # 初始化API实例
+    api = existing_api or create_api_instance(config_values, logger_to_use)
     if not api:
-        api = create_api_instance(config_values, logger_to_use)
-        if not api:
-            logger_to_use.error("无法创建API实例，监控终止")
-            return False
+        logger_to_use.error("无法创建API实例，监控终止")
+        return False
     
-    # 初始化上次执行时间记录
+    # 初始化时间记录
     last_times = {
-        'query': datetime.now(),
-        'config_reload': datetime.now(),
-        'cache_clean': datetime.now(),
-        'log_clean': datetime.now()
+        'query': datetime.now() - timedelta(seconds=config_values.get('query_interval', 60)),
+        'log_clean': datetime.now(),
+        # 移除配置重新加载的时间记录
     }
     
     logger_to_use.info("开始API监控模式")
@@ -125,45 +121,20 @@ def api_monitor(config, logger_instance=None, log_directory=None, existing_api=N
         while True:
             current_time = datetime.now()
             
-            # 检查是否需要重新加载配置
-            if (current_time - last_times['config_reload']).total_seconds() > CONFIG_RELOAD_INTERVAL:
-                logger_to_use.debug("重新加载配置")
-                config_file = get_effective_config_file()
-                # 保存旧配置值，以便在创建API实例失败时回退
-                old_config_values = config_values.copy()
-                try:
-                    if not config.read(config_file):
-                        logger_to_use.warning(f"无法读取配置文件: {config_file}")
-                    else:
-                        config_values = get_config_values(config)
-                        
-                        # 重新创建API实例
-                        new_api = create_api_instance(config_values, logger_to_use)
-                        if new_api:
-                            # 如果成功创建新的API实例，替换旧实例
-                            api = new_api
-                        else:
-                            # 如果创建失败，回退到旧配置值
-                            logger_to_use.warning("重新创建API实例失败，继续使用旧实例和配置")
-                            config_values = old_config_values
-                except Exception as error:
-                    logger_to_use.error(f"重新加载配置时出错: {str(error)}")
-                    # 出错时回退到旧配置
-                    config_values = old_config_values
-                
-                last_times['config_reload'] = current_time
+            # 移除检查是否需要重新加载配置的代码块
             
-            # 检查是否需要查询攻击日志
-            query_interval = config_values.get('query_interval')
-            if (current_time - last_times['query']).total_seconds() > query_interval:
+            # 检查是否需要查询新日志
+            if (current_time - last_times['query']).total_seconds() > config_values.get('query_interval', 60):
                 process_attack_logs(api, config_values, logger_to_use)
                 last_times['query'] = current_time
             
-            # 执行日志维护任务
-            last_times = perform_log_maintenance(current_time, last_times, config_values, api, logger_to_use, log_dir_to_use)
-            
-            # 休眠一段时间
-            time.sleep(1)
+            # 每天清理一次旧日志
+            if current_time.day != last_times['log_clean'].day:
+                # 执行日志维护任务
+                last_times = perform_log_maintenance(current_time, last_times, config_values, api, logger_to_use, log_dir_to_use)
+                
+                # 休眠一段时间
+                time.sleep(1)
     
     except KeyboardInterrupt:
         logger_to_use.info("收到中断信号，停止监控")
@@ -173,14 +144,57 @@ def api_monitor(config, logger_instance=None, log_directory=None, existing_api=N
     
     return True
 
+def parse_arguments():
+    """解析命令行参数"""
+    import argparse
+    
+    # 创建参数解析器
+    parser = argparse.ArgumentParser(description='SafeLine AutoBlocker - 自动监控雷池WAF攻击日志并封禁攻击IP')
+    
+    # 添加子命令
+    subparsers = parser.add_subparsers(dest='command', help='可用命令')
+    
+    # 查看配置命令
+    view_parser = subparsers.add_parser('view', help='查看当前配置')
+    view_parser.add_argument('--section', help='指定要查看的配置部分')
+    view_parser.add_argument('--option', help='指定要查看的配置选项')
+    
+    # 设置配置命令
+    set_parser = subparsers.add_parser('set', help='设置配置选项')
+    set_parser.add_argument('section', help='配置部分名称')
+    set_parser.add_argument('option', help='配置选项名称')
+    set_parser.add_argument('value', help='配置选项值')
+    
+    # 重置配置命令
+    reset_parser = subparsers.add_parser('reset', help='重置为默认配置')
+    reset_parser.add_argument('--confirm', action='store_true', help='确认重置')
+    
+    # 重新加载配置命令
+    reload_parser = subparsers.add_parser('reload', help='重新加载配置文件')
+    
+    # 添加其他命令行参数
+    parser.add_argument('--list-attack-types', action='store_true', help='获取并显示雷池WAF支持的攻击类型')
+    parser.add_argument('--get-logs', help='获取特定攻击类型的日志，多个ID用逗号分隔')
+    parser.add_argument('--clean-logs', action='store_true', help='立即清理过期日志文件')
+    parser.add_argument('--version', action='version', version=f'SafeLine AutoBlocker v{VERSION}')
+    
+    return parser.parse_args()
+
 def main():
     """主函数"""
+    # 解析命令行参数
+    args = parse_arguments()
+    
+    # 如果是配置命令，执行配置操作并退出
+    if args.command:
+        return handle_config_command(args)
+    
+    # 正常运行程序的逻辑
     # 使用全局logger，避免重复初始化
     global logger, log_dir
     
-    # 使用get_effective_config_file()获取配置文件路径
-    config_file = get_effective_config_file()
-    config = parse_config(config_file)
+    # 直接使用CONFIG_FILE而不是get_effective_config_file()
+    config = parse_config(CONFIG_FILE)
     if not config:
         logger.error("无法加载配置，程序退出")
         return 1
@@ -192,21 +206,6 @@ def main():
     
     # 获取配置值（只解析一次配置）
     config_values = get_config_values(config)
-    
-    parser = argparse.ArgumentParser(description='SafeLine Auto Blocker')
-    
-    # 添加命令行参数（移除了--api-monitor和--daemon参数）
-    parser.add_argument('--list-attack-types', action='store_true', help='获取并显示雷池WAF支持的攻击类型')
-    parser.add_argument('--get-logs', help='获取特定攻击类型的日志，多个ID用逗号分隔')
-    parser.add_argument('--clean-logs', action='store_true', help='立即清理过期日志文件')
-    parser.add_argument('--version', action='store_true', help='显示版本信息')
-    
-    args = parser.parse_args()
-    
-    # 显示版本信息
-    if args.version:
-        print(f"SafeLine Auto Blocker v{VERSION}")
-        return 0
     
     # 清理日志
     if args.clean_logs:
@@ -264,5 +263,87 @@ def main():
     
     return 0
 
+def handle_config_command(args):
+    """处理配置相关命令"""
+    from config import parse_config, update_config, create_default_config, reload_config
+    
+    # 直接使用CONFIG_FILE而不是get_effective_config_file()
+    config_file = CONFIG_FILE
+    
+    # 处理查看配置命令
+    if args.command == 'view':
+        # 查看配置
+        config = parse_config(config_file)
+        if not config:
+            print(f"错误: 无法读取配置文件 {config_file}")
+            return 1
+        
+        if args.section and args.option:
+            # 查看特定选项
+            if args.section in config and args.option in config[args.section]:
+                print(f"{args.section}.{args.option} = {config[args.section][args.option]}")
+            else:
+                print(f"错误: 配置项 {args.section}.{args.option} 不存在")
+                return 1
+        elif args.section:
+            # 查看特定部分
+            if args.section in config:
+                print(f"[{args.section}]")
+                for option, value in config[args.section].items():
+                    print(f"{option} = {value}")
+            else:
+                print(f"错误: 配置部分 {args.section} 不存在")
+                return 1
+        else:
+            # 查看全部配置
+            for section in config.sections():
+                print(f"[{section}]")
+                for option, value in config[section].items():
+                    print(f"{option} = {value}")
+                print()
+            
+            # 显示DEFAULT部分
+            print("[DEFAULT]")
+            for option, value in config.defaults().items():
+                print(f"{option} = {value}")
+    
+    # 处理设置配置命令
+    elif args.command == 'set':
+        # 设置配置
+        update_result = update_config({args.section: {args.option: args.value}}, config_file)
+        if update_result:
+            print(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
+        else:
+            print(f"错误: 设置 {args.section}.{args.option} 失败")
+            return 1
+    
+    # 处理重置配置命令
+    elif args.command == 'reset':
+        # 重置配置
+        if not args.confirm:
+            print("警告: 此操作将重置所有配置为默认值。如果确认，请添加 --confirm 参数。")
+            return 1
+        
+        reset_result = create_default_config(config_file)
+        if reset_result:
+            print("成功: 配置已重置为默认值")
+        else:
+            print("错误: 重置配置失败")
+            return 1
+    
+    # 处理重新加载配置命令
+    elif args.command == 'reload':
+        print(f"正在重新加载配置文件: {config_file}")
+        new_config = reload_config(config_file)
+        if new_config:
+            print("配置文件已成功重新加载")
+            return 0
+        else:
+            print("重新加载配置文件失败，请检查日志获取详细信息")
+            return 1
+    
+    return 0
+
+# 修改入口点
 if __name__ == "__main__":
-    sys.exit(main() or 0)  # 确保main函数返回值被正确处理
+    sys.exit(main())

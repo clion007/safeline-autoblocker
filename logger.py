@@ -35,18 +35,9 @@ class LoggerManager:
     
     def __init__(self, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
         """初始化日志管理器"""
-        # 修改: 根据环境选择正确的日志目录
-        from config import PATHS, is_installed_environment
-        if log_dir is None:
-            if is_installed_environment():
-                self.log_dir = PATHS['INSTALL_LOG_DIR']
-                self.log_file = PATHS['INSTALL_LOG_FILE']
-            else:
-                self.log_dir = LOG_DIR
-                self.log_file = LOG_FILE
-        else:
-            self.log_dir = log_dir
-            self.log_file = os.path.join(self.log_dir, 'safeline-autoblocker.log')
+        # 直接使用LOG_DIR和LOG_FILE，不再调用get_effective_*函数
+        self.log_dir = log_dir or LOG_DIR
+        self.log_file = os.path.join(self.log_dir, os.path.basename(LOG_FILE))
         
         self.log_level = log_level or DEFAULT_LOG_LEVEL
         self.log_format = log_format or DEFAULT_LOG_FORMAT
@@ -59,7 +50,7 @@ class LoggerManager:
         os.makedirs(self.log_dir, exist_ok=True)
         
         try:
-            logger = logging.getLogger('safeline-autoblocker')
+            logger = logging.getLogger('autoblocker')
             logger.setLevel(self.log_level)
             
             # 清除现有处理器避免重复
@@ -98,7 +89,7 @@ class LoggerManager:
         except Exception as error:
             print(f"设置日志记录时出错: {str(error)}")
             logging.basicConfig(level=self.log_level, format=self.log_format)
-            return logging.getLogger('safeline-autoblocker')
+            return logging.getLogger('autoblocker')
     
     def get_logger(self):
         """获取日志记录器"""

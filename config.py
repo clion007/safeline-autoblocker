@@ -10,52 +10,34 @@ import sys
 import configparser
 import logging
 
-# 定义路径常量
+# 定义路径常量 - 移除安装环境相关的路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(SCRIPT_DIR, 'auto_blocker.conf')
-KEY_FILE = os.path.join(SCRIPT_DIR, '.key')
+CONFIG_FILE = os.path.join(SCRIPT_DIR, 'setting.conf')
+KEY_FILE = os.path.join(SCRIPT_DIR, 'token.key')
 LOG_DIR = os.path.join(SCRIPT_DIR, 'logs')
-LOG_FILE = os.path.join(LOG_DIR, 'auto_blocker.log')
+LOG_FILE = os.path.join(LOG_DIR, 'autoblocker.log')
 
-# 安装相关路径 - 保持Linux路径风格
-INSTALL_DIR = '/opt/safeline/scripts'
-CONFIG_DIR = '/etc/safeline'
-INSTALL_LOG_DIR = '/var/log/safeline'
-SERVICE_FILE = '/etc/systemd/system/safeline-auto-blocker.service'
+def get_key_file():
+    return KEY_FILE
 
-# 集中定义所有路径
-PATHS = {
-    'SCRIPT_DIR': SCRIPT_DIR,
-    'CONFIG_FILE': CONFIG_FILE,
-    'KEY_FILE': KEY_FILE,
-    'LOG_DIR': LOG_DIR,
-    'LOG_FILE': LOG_FILE,
-    'INSTALL_DIR': INSTALL_DIR,
-    'CONFIG_DIR': CONFIG_DIR,
-    'INSTALL_LOG_DIR': INSTALL_LOG_DIR,
-    'SERVICE_FILE': SERVICE_FILE,
-    'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'auto_blocker.conf'),
-    'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, '.key'),
-    'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'auto_blocker.conf.example'),
-    'INSTALL_LOG_FILE': os.path.join(INSTALL_LOG_DIR, 'auto_blocker.log'),  # 添加安装日志文件路径
-    'SCRIPT_FILES': [
-        os.path.join(INSTALL_DIR, 'safeline_auto_blocker.py'),
-        os.path.join(INSTALL_DIR, 'api.py'),
-        os.path.join(INSTALL_DIR, 'config.py'),
-        os.path.join(INSTALL_DIR, 'logger.py'),
-        os.path.join(INSTALL_DIR, 'uninstall_auto_blocker.py')
-    ]
-}
+def get_config_file():
+    return CONFIG_FILE
 
-# 导入日志管理器（修复导入顺序）
+def get_log_dir():
+    return LOG_DIR
+
+def get_log_file():
+    return os.path.join(LOG_DIR, LOG_FILE)
+
+# 导入日志管理器
 from logger import logger_manager
 # 获取日志记录器
 logger = logger_manager.get_logger()
 
 def parse_config(config_file=None, logger_instance=None):
     """解析配置文件"""
-    # 使用有效的配置文件路径
-    config_file = config_file or get_effective_config_file()
+    # 使用传入的配置文件路径或默认路径
+    config_file = config_file or CONFIG_FILE
     
     # 使用日志管理器获取日志记录器
     logger_to_use = logger_instance or logger_manager.get_logger()
@@ -271,7 +253,97 @@ def reload_config(config_file=None, logger_instance=None):
         logger_to_use.error(f"重新加载配置文件时出错: {str(error)}")
         return None
 
-# 在文件末尾添加
+# 添加修改配置的函数
+def update_config(config_updates, config_file=None, logger_instance=None):
+    """更新配置文件
+    
+    Args:
+        config_updates: 字典，包含要更新的配置项，格式为 {'section': {'option': 'value'}}
+        config_file: 配置文件路径，默认使用当前环境的配置文件
+        logger_instance: 日志记录器实例
+        
+    Returns:
+        bool: 更新是否成功
+    """
+    # 使用有效的配置文件路径
+    config_file = config_file or get_effective_config_file()
+    
+    # 使用日志管理器获取日志记录器
+    logger_to_use = logger_instance or logger_manager.get_logger()
+    
+    try:
+        # 读取当前配置
+        config = configparser.ConfigParser()
+        if os.path.exists(config_file):
+            config.read(config_file)
+        
+        # 应用更新
+        for section, options in config_updates.items():
+            if section not in config:
+                config[section] = {}
+            for option, value in options.items():
+                config[section][option] = str(value)
+        
+        # 保存配置
+        with open(config_file, 'w') as f:
+            config.write(f)
+        
+        logger_to_use.info(f"配置文件已更新: {config_file}")
+        
+        # 验证新配置
+        new_config = parse_config(config_file, logger_to_use)
+        if new_config and validate_config(new_config, logger_to_use):
+            return True
+        else:
+            logger_to_use.error("更新后的配置验证失败")
+            return False
+            
+    except Exception as error:
+        logger_to_use.error(f"更新配置文件时出错: {str(error)}")
+        return False
+
+def create_default_config(config_file=None, logger_instance=None):
+    """创建默认配置文件"""
+    # 使用有效的配置文件路径
+    config_file = config_file or get_effective_config_file()
+    
+    # 使用日志管理器获取日志记录器
+    logger_to_use = logger_instance or logger_manager.get_logger()
+    
+    # 默认配置 - 使用常量而非硬编码值
+    default_config = {
+        'DEFAULT': {
+            'HOST': 'localhost',
+            'PORT': '9443',
+            'TOKEN': '',  # 需要在安装时设置
+            'DEFAULT_IP_GROUP': '人机验证',
+            'USE_TYPE_GROUPS': 'true',
+            'QUERY_INTERVAL': '60',
+            'MAX_LOGS_PER_QUERY': '100',
+            'LOG_RETENTION_DAYS': '30',
+            'CONFIG_RELOAD_INTERVAL': str(CONFIG_RELOAD_INTERVAL),
+            'ATTACK_TYPES_FILTER': ''
+        },
+        'TYPE_GROUP_MAPPING': {
+            '0': '黑名单',  # SQL注入
+            '5': '黑名单',  # 后门
+            '7': '黑名单',  # 代码执行
+            '8': '黑名单',  # 代码注入
+            '9': '黑名单',  # 命令注入
+            '11': '黑名单', # 文件包含
+            '29': '黑名单', # 模板注入
+            '1': '人机验证',  # XSS
+            '2': '人机验证',  # CSRF
+            '3': '人机验证',  # SSRF
+            '4': '人机验证',  # 拒绝服务
+            '6': '人机验证',  # 反序列化
+            '10': '人机验证', # 文件上传
+            '21': '人机验证'  # 扫描器
+        }
+    }
+    
+    return update_config(default_config, config_file, logger_to_use)
+
 def decrypt_token(encrypted_token, key):
     """解密令牌"""
     try:
@@ -284,30 +356,3 @@ def decrypt_token(encrypted_token, key):
         return decrypted_token
     except Exception as error:
         raise Exception(f"解密令牌失败: {str(error)}")
-
-def get_effective_key_file():
-    """获取当前环境下有效的密钥文件路径"""
-    if is_installed_environment():
-        return PATHS['INSTALL_KEY_FILE']
-    else:
-        return KEY_FILE
-
-# 读取密钥
-try:
-    key_file_path = get_effective_key_file()
-    with open(key_file_path, 'r') as key_file:
-        key = key_file.read().strip()
-except Exception as error:
-    logger.error(f"读取密钥文件时出错: {str(error)}")
-    key = None
-
-def is_installed_environment():
-    """检查当前是否在安装环境中运行"""
-    return os.path.exists(INSTALL_DIR) and os.path.isdir(INSTALL_DIR)
-
-def get_effective_config_file():
-    """获取当前环境下有效的配置文件路径"""
-    if is_installed_environment():
-        return PATHS['INSTALL_CONFIG_FILE']
-    else:
-        return CONFIG_FILE
