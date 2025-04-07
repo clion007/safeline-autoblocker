@@ -18,9 +18,16 @@ echo "
 ╚═══════════════════════════════════════════════╝
 "
 
+# 在脚本开头添加清理函数
+cleanup() {
+    echo "正在清理临时文件..."
+    rm -f /tmp/install-autoblocker.py
+}
+
 # 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
    echo "错误: 请使用root权限运行此脚本"
+   cleanup  # 清理调用
    exit 1
 fi
 
@@ -35,6 +42,7 @@ elif command -v yum &> /dev/null; then
     yum install -y python3 python3-pip
 else
     echo "不支持的系统，请手动安装Python3和pip"
+    cleanup  # 清理调用
     exit 1
 fi
 
@@ -89,6 +97,7 @@ download_file() {
 echo "正在下载安装脚本..."
 if ! download_file "https://gitee.com/clion007/safeline-autoblocker/raw/main/install-autoblocker.py" "/tmp/install-autoblocker.py"; then
     echo "下载安装脚本失败，安装中止"
+    cleanup  # 清理调用
     exit 1
 fi
 
@@ -99,11 +108,12 @@ chmod +x /tmp/install-autoblocker.py
 echo "正在运行安装脚本..."
 if ! python3 /tmp/install-autoblocker.py; then
     echo "安装脚本执行失败"
+    cleanup  # 清理调用
     exit 1
 fi
 
 # 清理临时文件
-rm -f /tmp/install-autoblocker.py
+cleanup  # 清理调用
 
 echo "
 安装完成！您可以使用以下命令管理服务:
