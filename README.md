@@ -1,4 +1,4 @@
-# SafeLine Auto Blocker
+# SafeLine AutoBlocker
 
 ## 功能特点
 
@@ -25,12 +25,12 @@
 使用以下命令一键安装：
 
 ```bash
-wget -O - https://gitee.com/clion007/safeline-auto-blocker/raw/main/quick_install.sh | sudo bash
+wget -O - https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install.sh | sudo bash
 ```
 或者
 
 ```bash
-curl -sSL https://gitee.com/clion007/safeline-auto-blocker/raw/main/quick_install.sh | sudo bash
+curl -sSL https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install.sh | sudo bash
 ```
 
 ### 手动安装
@@ -38,21 +38,21 @@ curl -sSL https://gitee.com/clion007/safeline-auto-blocker/raw/main/quick_instal
 1. 下载安装脚本：
 
 ```bash
-wget https://gitee.com/clion007/safeline-auto-blocker/raw/main/install_auto_blocker.py -O /tmp/install_auto_blocker.py
+wget https://gitee.com/clion007/safeline-autoblocker/raw/main/install-autoblocker.py -O /tmp/install-autoblocker.py
 ```
 
 2. 运行安装脚本：
 
 ```bash
-sudo chmod +x /tmp/install_auto_blocker.py
-sudo python3 /tmp/install_auto_blocker.py
+sudo chmod +x /tmp/install-autoblocker.py
+sudo python3 /tmp/install-autoblocker.py
 ```
 
 3. 按照提示输入雷池WAF的API信息。
 
 ## 配置文件说明
 
-配置文件位于 `/etc/safeline/auto_blocker.conf`，主要配置项包括：
+配置文件位于 `/etc/safeline/safeline-autoblocker.conf`，主要配置项包括：
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -98,11 +98,13 @@ SafeLine Auto Blocker 支持以下命令行参数：
 
 | 参数 | 说明 | 示例 |
 |------|------|------|
-| --list-attack-types | 获取并显示雷池WAF支持的攻击类型 | `python3 safeline_auto_blocker.py --list-attack-types` |
-| --get-logs | 获取特定攻击类型的日志 | `python3 safeline_auto_blocker.py --get-logs 0,7,21` |
-| --clean-logs | 立即清理过期日志文件 | `python3 safeline_auto_blocker.py --clean-logs` |
-| --version | 显示版本信息 | `python3 safeline_auto_blocker.py --version` |
-| --help | 显示帮助信息 | `python3 safeline_auto_blocker.py --help` |
+| --list-attack-types | 获取并显示雷池WAF支持的攻击类型 | `python3 safeline-autoblocker.py --list-attack-types` |
+| --get-logs | 获取特定攻击类型的日志 | `python3 safeline-autoblocker.py --get-logs 0,7,21` |
+| --clean-logs | 立即清理过期日志文件 | `python3 safeline-autoblocker.py --clean-logs` |
+| --version | 显示版本信息 | `python3 safeline-autoblocker.py --version` |
+| --help | 显示帮助信息 | `python3 safeline-autoblocker.py --help` |
+
+# SafeLine AutoBlocker
 
 ## 使用方法
 
@@ -111,25 +113,25 @@ SafeLine Auto Blocker 支持以下命令行参数：
 1. 启动服务：
 
 ```bash
-sudo systemctl start safeline_auto_blocker
+sudo systemctl start safeline-autoblocker
 ```
 
 2. 查看服务状态：
 
 ```bash
-sudo systemctl status safeline_auto_blocker
+sudo systemctl status safeline-autoblocker
 ```
 
 3. 查看日志：
 
 ```bash
-sudo journalctl -u safeline_auto_blocker -f
+sudo journalctl -u safeline-autoblocker -f
 ```
 
 ### 手动运行
 
 ```bash
-sudo python3 /opt/safeline/scripts/safeline_auto_blocker.py
+sudo python3 /opt/safeline/scripts/safeline-autoblocker.py
 ```
 
 ## 攻击类型参考
@@ -160,13 +162,13 @@ sudo python3 /opt/safeline/scripts/safeline_auto_blocker.py
 1. 下载卸载脚本：
 
 ```bash
-wget https://gitee.com/clion007/safeline-auto-blocker/raw/main/uninstall_auto_blocker.py
+wget https://gitee.com/clion007/safeline-autoblocker/raw/main/uninstall-autoblocker.py
 ```
 
 2. 运行卸载脚本：
 
 ```bash
-sudo python3 uninstall_auto_blocker.py
+sudo python3 uninstall-autoblocker.py
 ```
 
 ### 手动卸载
@@ -174,33 +176,33 @@ sudo python3 uninstall_auto_blocker.py
 1. 停止服务：
 
 ```bash
-sudo systemctl stop safeline_auto_blocker
+sudo systemctl stop safeline-autoblocker
 ```
 
 2. 禁用开机自启：
 
 ```bash
-sudo systemctl disable safeline_auto_blocker
+sudo systemctl disable safeline-autoblocker
 ```
 
 3. 删除systemd服务文件：
 
 ```bash
-sudo rm /etc/systemd/system/safeline_auto_blocker.service
+sudo rm /etc/systemd/system/safeline-autoblocker.service
 sudo systemctl daemon-reload
 ```
 
 4. 删除配置文件和密钥：
 
 ```bash
-sudo rm /etc/safeline/auto_blocker.conf
-sudo rm /etc/safeline/auto_blocker.key
+sudo rm /etc/safeline/safeline-autoblocker.conf
+sudo rm /etc/safeline/safeline-autoblocker.key
 ```
 
 5. 删除脚本文件：
 
 ```bash
-sudo rm /opt/safeline/scripts/safeline_auto_blocker.py
+sudo rm /opt/safeline/scripts/safeline-autoblocker.py
 ```
 
 ## 故障排除
@@ -209,7 +211,7 @@ sudo rm /opt/safeline/scripts/safeline_auto_blocker.py
    
 - 检查配置文件是否正确
 - 检查API令牌是否有效
-- 查看服务日志：`sudo journalctl -u safeline-auto-blocker -n 50`
+- 查看服务日志：`sudo journalctl -u safeline-autoblocker -n 50`
 
 2. 无法添加IP到IP组
    
@@ -236,7 +238,7 @@ sudo rm /opt/safeline/scripts/safeline_auto_blocker.py
 
 3. **如何修改默认IP组名称？**
    
-编辑配置文件 `/etc/safeline/auto_blocker.conf`，修改 `DEFAULT_IP_GROUP` 参数，然后重启服务。
+编辑配置文件 `/etc/safeline/safeline-autoblocker.conf`，修改 `DEFAULT_IP_GROUP` 参数，然后重启服务。
 
 4. **如何只监控特定类型的攻击？**
    
@@ -259,13 +261,13 @@ sudo tail -f /var/log/safeline/auto_blocker.log
 
 8. **如何设置日志保留周期？**
    
-编辑配置文件 `/etc/safeline/auto_blocker.conf`，修改 `LOG_RETENTION_DAYS` 参数的值（单位为天）。设置为0表示永久保留日志。
+编辑配置文件 `/etc/safeline/safeline-autoblocker.conf`，修改 `LOG_RETENTION_DAYS` 参数的值（单位为天）。设置为0表示永久保留日志。
 
 9. **如何手动清理过期日志？**
    
 可以使用以下命令手动触发日志清理：
 ```bash
-sudo python3 /opt/safeline/scripts/safeline_auto_blocker.py --clean-logs
+sudo python3 /opt/safeline/scripts/safeline-autoblocker.py --clean-logs
 ```
 
 ## 更新日志

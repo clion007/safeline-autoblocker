@@ -61,12 +61,13 @@ class SafeLineAPI:
     """雷池WAF API交互类"""
     
     def __init__(self, host, port, token, logger_instance=None):
-        """初始化API实例"""
+        """初始化API客户端"""
         self.host = host
         self.port = port
         self.token = token
-        # 使用日志管理器获取日志记录器
-        self.logger = logger_instance or logger_manager.get_logger()
+        self.headers = {'Authorization': f'Bearer {token}'}
+        self.session = requests.Session()
+        self.logger = logger_instance or logger_manager.get_logger('safeline-autoblocker')
         
         self.headers = {
             'X-SLCE-API-TOKEN': self.token,

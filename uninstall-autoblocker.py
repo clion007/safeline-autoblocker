@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-SafeLine Auto Blocker 卸载脚本
+SafeLine AutoBlocker 卸载脚本
 ----------------------------
-用于卸载SafeLine Auto Blocker。
+用于卸载SafeLine AutoBlocker。
 
 作者: Clion Nieh
 版本: 1.2.0
@@ -21,7 +21,7 @@ def print_banner():
     print("""
     ╔═══════════════════════════════════════════════╗
     ║                                               ║
-    ║       SafeLine Auto Blocker 卸载程序          ║
+    ║       SafeLine AutoBlocker 卸载程序           ║
     ║                                               ║
     ║       版本: 1.2.0                             ║
     ║       作者: Clion Nieh                        ║
@@ -39,31 +39,41 @@ except ImportError:
     INSTALL_DIR = '/opt/safeline/scripts'
     CONFIG_DIR = '/etc/safeline'
     INSTALL_LOG_DIR = '/var/log/safeline'
-    SERVICE_FILE = '/etc/systemd/system/safeline-auto-blocker.service'
+    SERVICE_FILE = '/etc/systemd/system/safeline-autoblocker.service'
     
     PATHS = {
         'INSTALL_DIR': INSTALL_DIR,
         'CONFIG_DIR': CONFIG_DIR,
         'INSTALL_LOG_DIR': INSTALL_LOG_DIR,
         'SERVICE_FILE': SERVICE_FILE,
-        'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'auto_blocker.conf'),
-        'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, '.key'),
-        'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'auto_blocker.conf.example'),
+        'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.conf'),
+        'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.key'),
+        'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.conf.example'),
         'SCRIPT_FILES': [
-            os.path.join(INSTALL_DIR, 'safeline_auto_blocker.py'),
+            os.path.join(INSTALL_DIR, 'safeline-autoblocker.py'),
             os.path.join(INSTALL_DIR, 'api.py'),
             os.path.join(INSTALL_DIR, 'config.py'),
             os.path.join(INSTALL_DIR, 'logger.py'),
-            os.path.join(INSTALL_DIR, 'uninstall_auto_blocker.py')
+            os.path.join(INSTALL_DIR, 'uninstall-autoblocker.py')
         ]
     }
 
 def stop_service():
-    """停止服务"""
-    print("停止服务...")
-    os.system('systemctl stop safeline_auto_blocker')
-    os.system('systemctl disable safeline_auto_blocker')
-    return True
+    """停止服务（增加重试机制）"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        print(f"停止服务尝试 ({attempt + 1}/{max_retries})...")
+        os.system('systemctl stop safeline-autoblocker')
+        os.system('systemctl disable safeline-autoblocker')
+        
+        # 验证服务状态
+        status = os.system('systemctl is-active --quiet safeline-autoblocker')
+        if status != 0:
+            return True
+        time.sleep(2)
+    
+    print("错误: 无法停止服务")
+    return False
 
 def remove_service_file():
     """删除服务文件"""
@@ -83,7 +93,7 @@ def remove_service_file():
         return True
 
 def remove_config():
-    """删除配置文件"""
+    """删除配置文件（增加隐藏文件清理）"""
     # 修改: 使用安装路径中的配置文件和密钥文件
     from config import PATHS
     config_file = PATHS['INSTALL_CONFIG_FILE']
@@ -117,6 +127,21 @@ def remove_config():
             print(f"删除配置示例文件失败: {str(e)}")
             files_removed = False
     
+    # 新增隐藏文件清理
+    hidden_files = [
+        os.path.join(PATHS['CONFIG_DIR'], '.safeline-autoblocker'),
+        os.path.join(PATHS['INSTALL_DIR'], '.safeline-cache')
+    ]
+    
+    for h_file in hidden_files:
+        if os.path.exists(h_file):
+            try:
+                os.remove(h_file)
+                print(f"删除隐藏文件: {h_file}")
+            except Exception as e:
+                print(f"删除隐藏文件失败: {h_file}, 错误: {str(e)}")
+                files_removed = False
+    
     return files_removed
 
 def remove_logs():
@@ -134,6 +159,39 @@ def remove_logs():
     else:
         print(f"日志目录不存在: {log_dir}")
         return True
+
+import time
+
+def remove_directories():
+    """删除相关目录"""
+    # 需要删除的目录列表
+    directories = [
+        PATHS['INSTALL_DIR'],
+        PATHS['INSTALL_LOG_DIR'],
+        PATHS['CONFIG_DIR'],
+        os.path.dirname(PATHS['INSTALL_DIR']),  # /opt/safeline
+        os.path.dirname(PATHS['INSTALL_LOG_DIR'])  # /var/log/safeline
+    ]
+    
+    # 去重处理
+    unique_dirs = list({d for d in directories if d.strip()})
+    
+    all_removed = True
+    time.sleep(1)
+    
+    for directory in unique_dirs:
+        if os.path.exists(directory):
+            try:
+                # 增加异常处理细节
+                shutil.rmtree(directory, ignore_errors=True)
+                print(f"成功删除目录: {directory}")
+            except Exception as e:
+                print(f"删除目录失败: {directory}, 错误详情: {str(e)}")
+                all_removed = False
+        else:
+            print(f"目录不存在: {directory}")
+    
+    return all_removed
 
 def remove_script():
     """删除脚本文件"""
@@ -154,34 +212,6 @@ def remove_script():
     
     return files_removed
 
-def remove_directories():
-    """删除相关目录"""
-    # 需要删除的目录列表
-    directories = [
-        PATHS['INSTALL_DIR'],
-        PATHS['INSTALL_LOG_DIR'],
-        os.path.dirname(PATHS['INSTALL_DIR']),  # /opt/safeline
-        PATHS['CONFIG_DIR']
-    ]
-    
-    all_removed = True
-    
-    for directory in directories:
-        if os.path.exists(directory):
-            try:
-                # 检查目录是否为空
-                if not os.listdir(directory):
-                    os.rmdir(directory)
-                    print(f"删除空目录: {directory}")
-                else:
-                    print(f"目录不为空，跳过删除: {directory}")
-                    all_removed = False
-            except Exception as e:
-                print(f"删除目录失败: {directory}, 错误: {str(e)}")
-                all_removed = False
-    
-    return all_removed
-
 def main():
     """主函数"""
     # 打印横幅
@@ -193,7 +223,7 @@ def main():
         return
     
     # 确认卸载
-    confirm = input("确定要卸载 SafeLine Auto Blocker? (y/n): ").strip().lower()
+    confirm = input("确定要卸载 SafeLine AutoBlocker? (y/n): ").strip().lower()
     if confirm != 'y':
         print("卸载已取消")
         return
@@ -213,7 +243,7 @@ def main():
     # 直接删除日志
     logs_removed = remove_logs()
     
-    # 删除相关目录
+    # 最后删除相关目录
     dirs_removed = remove_directories()
         
     # 卸载结果反馈

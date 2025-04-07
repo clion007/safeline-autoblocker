@@ -33,22 +33,22 @@ except ImportError:
     INSTALL_DIR = '/opt/safeline/scripts'
     CONFIG_DIR = '/etc/safeline'
     INSTALL_LOG_DIR = '/var/log/safeline'
-    SERVICE_FILE = '/etc/systemd/system/safeline-auto-blocker.service'
+    SERVICE_FILE = '/etc/systemd/system/safeline-autoblocker.service'
     
     PATHS = {
         'INSTALL_DIR': INSTALL_DIR,
         'CONFIG_DIR': CONFIG_DIR,
         'INSTALL_LOG_DIR': INSTALL_LOG_DIR,
         'SERVICE_FILE': SERVICE_FILE,
-        'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'auto_blocker.conf'),
-        'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, '.key'),
-        'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'auto_blocker.conf.example'),
+        'INSTALL_CONFIG_FILE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.conf'),
+        'INSTALL_KEY_FILE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.key'),
+        'INSTALL_CONFIG_EXAMPLE': os.path.join(CONFIG_DIR, 'safeline-autoblocker.conf.example'),
         'SCRIPT_FILES': [
-            os.path.join(INSTALL_DIR, 'safeline_auto_blocker.py'),
+            os.path.join(INSTALL_DIR, 'safeline-autoblocker.py'),
             os.path.join(INSTALL_DIR, 'api.py'),
             os.path.join(INSTALL_DIR, 'config.py'),
             os.path.join(INSTALL_DIR, 'logger.py'),
-            os.path.join(INSTALL_DIR, 'uninstall_auto_blocker.py')
+            os.path.join(INSTALL_DIR, 'uninstall-autoblocker.py')
         ]
     }
 
@@ -57,7 +57,7 @@ def print_banner():
     print("""
     ╔═══════════════════════════════════════════════╗
     ║                                               ║
-    ║       SafeLine Auto Blocker 安装程序          ║
+    ║       SafeLine AutoBlocker 安装程序           ║
     ║                                               ║
     ║       版本: 1.2.0                             ║
     ║       作者: Clion Nieh                        ║
@@ -74,14 +74,12 @@ def create_directories(paths):
     ]
     
     for directory in directories:
-        if not os.path.exists(directory):
-            try:
-                os.makedirs(directory)
-                print(f"创建目录: {directory}")
-            except Exception as e:
-                print(f"创建目录 {directory} 失败: {str(e)}")
-                return False
-    
+        try:
+            os.makedirs(directory, mode=0o755, exist_ok=True)
+            print(f"创建目录: {directory} (权限:755)")
+        except Exception as error:
+            print(f"目录创建失败: {directory}, 错误: {str(error)}")
+            return False
     return True
 
 # 添加下载模块文件的函数
@@ -134,7 +132,7 @@ def download_file(url, destination, max_retries=3):
 def download_main_script(paths):
     """下载主监控脚本"""
     script_dir = paths['INSTALL_DIR']
-    script_path = os.path.join(script_dir, 'safeline_auto_blocker.py')
+    script_path = os.path.join(script_dir, 'safeline-autoblocker.py')
     
     # 确保目录存在
     if not os.path.exists(script_dir):
@@ -146,7 +144,7 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    url = 'https://gitee.com/clion007/safeline-autoblocker/raw/main/safeline-autoblocker.py'
     if download_file(url, script_path):
         os.chmod(script_path, 0o755)  # 添加执行权限
         print(f"下载脚本文件: {script_path}")
@@ -158,19 +156,19 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
@@ -190,12 +188,12 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/safeline-autoblocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
-            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/uninstall-autoblocker.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall-autoblocker.py')
         }
     ]
     
@@ -215,8 +213,8 @@ def download_additional_files(paths):
 
 def copy_script(paths):
     """复制脚本文件"""
-    source = 'safeline_auto_blocker.py'
-    destination = os.path.join(paths['INSTALL_DIR'], 'safeline_auto_blocker.py')
+    source = 'safeline-autoblocker.py'
+    destination = os.path.join(paths['INSTALL_DIR'], 'safeline-autoblocker.py')
     
     if not os.path.exists(source):
         print(f"脚本文件不存在: {source}")
@@ -395,7 +393,7 @@ CONFIG_RELOAD_INTERVAL = 300
 def download_main_script(paths):
     """下载主监控脚本"""
     script_dir = paths['INSTALL_DIR']
-    script_path = os.path.join(script_dir, 'safeline_auto_blocker.py')
+    script_path = os.path.join(script_dir, 'safeline-autoblocker.py')
     
     # 确保目录存在
     if not os.path.exists(script_dir):
@@ -407,7 +405,7 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/safeline_auto_blocker.py'
+    url = 'https://gitee.com/clion007/safeline-autoblocker/raw/main/safeline-autoblocker.py'
     if download_file(url, script_path):
         os.chmod(script_path, 0o755)
         print(f"下载脚本文件: {script_path}")
@@ -419,19 +417,19 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/api.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/config.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/logger.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/__init__.py',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
@@ -451,12 +449,12 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/auto_blocker.conf.example',
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/safeline-autoblocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/uninstall_auto_blocker.py',
-            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
+            'url': 'https://gitee.com/clion007/safeline-autoblocker/raw/main/uninstall-autoblocker.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall-autoblocker.py')
         }
     ]
     
@@ -468,18 +466,16 @@ def download_additional_files(paths):
             success = False
         else:
             # 为卸载脚本添加执行权限
-            if file_info['path'].endswith('.sh'):
+            if file_info['path'].endswith('.py') or file_info['path'].endswith('.sh'):
                 os.chmod(file_info['path'], 0o755)
-                
             print(f"下载文件: {file_info['path']}")
     
     return success
 
-# 修复服务名称不一致的问题
 def create_service(paths):
     """创建systemd服务"""
     service_file = paths['SERVICE_FILE']
-    script_path = os.path.join(paths['INSTALL_DIR'], 'safeline_auto_blocker.py')
+    script_path = os.path.join(paths['INSTALL_DIR'], 'safeline-autoblocker.py')
     
     service_content = f"""[Unit]
 Description=SafeLine Auto Blocker
@@ -510,21 +506,20 @@ WantedBy=multi-user.target
         print(f"创建服务文件失败: {str(e)}")
         return False
 
-# 修复服务启动函数中的服务名称
 def start_service():
     """启动服务并检查状态"""
     try:
         # 启动服务
-        os.system('systemctl start safeline-auto-blocker')
+        os.system('systemctl start safeline-autoblocker')
         
         # 检查服务状态
-        status = os.system('systemctl is-active --quiet safeline-auto-blocker')
+        status = os.system('systemctl is-active --quiet safeline-autoblocker')
         if status == 0:
             print("服务启动成功")
             return True
         else:
             print("服务启动失败，请检查日志获取详细信息")
-            print("可使用命令: journalctl -u safeline-auto-blocker -n 50")
+            print("可使用命令: journalctl -u safeline-autoblocker -n 50")
             return False
     except Exception as error:
         print(f"启动服务时出错: {str(error)}")
@@ -537,7 +532,7 @@ def cleanup_files(paths):
     
     # 禁用服务
     try:
-        os.system('systemctl disable safeline-auto-blocker')
+        os.system('systemctl disable safeline-autoblocker')
         print("禁用服务")
     except Exception as error:
         print(f"禁用服务失败: {str(error)}")

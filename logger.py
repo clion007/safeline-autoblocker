@@ -46,7 +46,7 @@ class LoggerManager:
                 self.log_file = LOG_FILE
         else:
             self.log_dir = log_dir
-            self.log_file = os.path.join(self.log_dir, 'auto_blocker.log')
+            self.log_file = os.path.join(self.log_dir, 'safeline-autoblocker.log')
         
         self.log_level = log_level or DEFAULT_LOG_LEVEL
         self.log_format = log_format or DEFAULT_LOG_FORMAT
@@ -59,7 +59,7 @@ class LoggerManager:
         os.makedirs(self.log_dir, exist_ok=True)
         
         try:
-            logger = logging.getLogger('auto_blocker')
+            logger = logging.getLogger('safeline-autoblocker')
             logger.setLevel(self.log_level)
             
             # 清除现有处理器避免重复
@@ -98,7 +98,7 @@ class LoggerManager:
         except Exception as error:
             print(f"设置日志记录时出错: {str(error)}")
             logging.basicConfig(level=self.log_level, format=self.log_format)
-            return logging.getLogger('auto_blocker')
+            return logging.getLogger('safeline-autoblocker')
     
     def get_logger(self):
         """获取日志记录器"""
@@ -118,7 +118,7 @@ class LoggerManager:
             cutoff_date = datetime.now() - timedelta(days=retention_days)
             
             # 查找所有日志文件
-            log_pattern = os.path.join(log_dir, "*.log*")
+            log_pattern = os.path.join(log_dir, "safeline-autoblocker-*.log*")
             log_files = glob.glob(log_pattern)
             
             # 统计删除的文件数量
