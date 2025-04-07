@@ -4,7 +4,7 @@
 """
 SafeLine AutoBlocker 安装脚本
 ----------------------------
-用于安装SafeLine AutoBlocker
+用于安装 SafeLine AutoBlocker
 
 作者: Clion Nieh
 版本: 1.2.0
