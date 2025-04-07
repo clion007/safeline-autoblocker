@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-SafeLine Auto Blocker 安装脚本
+SafeLine AutoBlocker 安装脚本
 ----------------------------
-用于安装SafeLine Auto Blocker。
+用于安装SafeLine AutoBlocker
 
 作者: Clion Nieh
 版本: 1.2.0
