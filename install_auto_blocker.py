@@ -352,15 +352,10 @@ def download_module_files(paths):
     ]
     
     success = True
-    for file_info in files_to_download:
+    for file_info in module_files:  # 修复：使用module_files而不是files_to_download
         try:
             print(f"正在下载 {os.path.basename(file_info['path'])}...")
             urllib.request.urlretrieve(file_info['url'], file_info['path'])
-            
-            # 为卸载脚本添加执行权限
-            if file_info['path'].endswith('.sh'):
-                os.chmod(file_info['path'], 0o755)
-                
             print(f"下载文件: {file_info['path']}")
         except Exception as error:
             print(f"下载文件 {file_info['path']} 失败: {str(error)}")
@@ -569,10 +564,10 @@ def main():
     
     print("\n安装完成！")
     print("您可以使用以下命令管理服务:")
-    print("  启动服务: systemctl start safeline_auto_blocker")
-    print("  停止服务: systemctl stop safeline_auto_blocker")
-    print("  查看状态: systemctl status safeline_auto_blocker")
-    print("  查看日志: journalctl -u safeline_auto_blocker -f")
+    print("  启动服务: systemctl start safeline-auto-blocker")  # 修复：使用连字符而非下划线
+    print("  停止服务: systemctl stop safeline-auto-blocker")   # 修复：使用连字符而非下划线
+    print("  查看状态: systemctl status safeline-auto-blocker") # 修复：使用连字符而非下划线
+    print("  查看日志: journalctl -u safeline-auto-blocker -f") # 修复：使用连字符而非下划线
     print("\n如需卸载，请运行: python3 /opt/safeline/scripts/uninstall_auto_blocker.py")
     
     return True
