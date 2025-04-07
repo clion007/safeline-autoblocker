@@ -87,28 +87,28 @@ download_file() {
 
 # 下载安装脚本
 echo "正在下载安装脚本..."
-if ! download_file "https://gitee.com/clion007/safeline-auto-blocker/raw/main/install_auto_blocker.py" "/tmp/install_auto_blocker.py"; then
+if ! download_file "https://gitee.com/clion007/safeline-autoblocker/raw/main/install-autoblocker.py" "/tmp/install-autoblocker.py"; then
     echo "下载安装脚本失败，安装中止"
     exit 1
 fi
 
 # 添加执行权限
-chmod +x /tmp/install_auto_blocker.py
+chmod +x /tmp/install-autoblocker.py
 
 # 运行安装脚本
 echo "正在运行安装脚本..."
-if ! python3 /tmp/install_auto_blocker.py; then
+if ! python3 /tmp/install-autoblocker.py; then
     echo "安装脚本执行失败"
     exit 1
 fi
 
 # 清理临时文件
-rm -f /tmp/install_auto_blocker.py
+rm -f /tmp/install-autoblocker.py
 
 echo "
 安装完成！您可以使用以下命令管理服务:
-  启动服务: systemctl start safeline-auto-blocker
-  停止服务: systemctl stop safeline-auto-blocker
-  查看状态: systemctl status safeline-auto-blocker
-  查看日志: journalctl -u safeline-auto-blocker -f
+  启动服务: systemctl start safeline-autoblocker
+  停止服务: systemctl stop safeline-autoblocker
+  查看状态: systemctl status safeline-autoblocker
+  查看日志: journalctl -u safeline-autoblocker -f
 "
