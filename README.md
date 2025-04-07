@@ -25,12 +25,12 @@
 使用以下命令一键安装：
 
 ```bash
-wget -O - https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
+wget -O - https://gitee.com/clion007/safeline-auto-blocker/raw/main/quick_install.sh | sudo bash
 ```
 或者
 
 ```bash
-curl -sSL https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
+curl -sSL https://gitee.com/clion007/safeline-auto-blocker/raw/main/quick_install.sh | sudo bash
 ```
 
 ### 手动安装
@@ -38,13 +38,14 @@ curl -sSL https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/quick_ins
 1. 下载安装脚本：
 
 ```bash
-wget https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py
+wget https://gitee.com/clion007/safeline-auto-blocker/raw/main/install_auto_blocker.py -O /tmp/install_auto_blocker.py
 ```
 
 2. 运行安装脚本：
 
 ```bash
-sudo python3 install_auto_blocker.py
+sudo chmod +x /tmp/install_auto_blocker.py
+sudo python3 /tmp/install_auto_blocker.py
 ```
 
 3. 按照提示输入雷池WAF的API信息。
@@ -159,7 +160,7 @@ sudo python3 /opt/safeline/scripts/safeline_auto_blocker.py
 1. 下载卸载脚本：
 
 ```bash
-wget https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py
+wget https://gitee.com/clion007/safeline-auto-blocker/raw/main/uninstall_auto_blocker.py
 ```
 
 2. 运行卸载脚本：

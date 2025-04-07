@@ -407,76 +407,71 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    url = 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/safeline_auto_blocker.py'
     if download_file(url, script_path):
-        os.chmod(script_path, 0o755)  # 添加执行权限
+        os.chmod(script_path, 0o755)
         print(f"下载脚本文件: {script_path}")
         return True
     else:
         return False
 
-# 修改下载模块文件函数，使用更稳定的镜像
 def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
     
     success = True
     for file_info in module_files:
-        try:
-            print(f"正在下载 {os.path.basename(file_info['path'])}...")
-            urllib.request.urlretrieve(file_info['url'], file_info['path'])
-            print(f"下载文件: {file_info['path']}")
-        except Exception as error:
-            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
+        print(f"正在下载 {os.path.basename(file_info['path'])}...")
+        if not download_file(file_info['url'], file_info['path']):
+            print(f"下载文件 {file_info['path']} 失败")
             success = False
+        else:
+            print(f"下载文件: {file_info['path']}")
     
     return success
 
-# 修改下载附加文件函数，使用更稳定的镜像
 def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/auto_blocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'url': 'https://gitee.com/clion007/safeline-auto-blocker/raw/main/uninstall_auto_blocker.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
         }
     ]
     
     success = True
     for file_info in files_to_download:
-        try:
-            print(f"正在下载 {os.path.basename(file_info['path'])}...")
-            urllib.request.urlretrieve(file_info['url'], file_info['path'])
-            
+        print(f"正在下载 {os.path.basename(file_info['path'])}...")
+        if not download_file(file_info['url'], file_info['path']):
+            print(f"下载文件 {file_info['path']} 失败")
+            success = False
+        else:
             # 为卸载脚本添加执行权限
             if file_info['path'].endswith('.sh'):
                 os.chmod(file_info['path'], 0o755)
                 
             print(f"下载文件: {file_info['path']}")
-        except Exception as error:
-            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
-            success = False
     
     return success
 
