@@ -52,12 +52,12 @@ def perform_log_maintenance(current_time, last_times, config_values, api, logger
         api.clean_cache()
         last_times['cache_clean'] = current_time
     
-    # 检查是否需要清理日志 (可选，因为RotatingFileHandler会自动管理日志文件数量)
+    # 检查是否需要清理日志
     log_retention_days = config_values.get('log_retention_days', 30)
     if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > LOG_CLEAN_INTERVAL:
         logger_to_use.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
-        # 只传递保留天数参数
-        clean_old_logs(retention_days=log_retention_days)
+        # 传递保留天数和日志目录参数
+        clean_old_logs(retention_days=log_retention_days, log_directory=log_dir_to_use)
         last_times['log_clean'] = current_time
     
     return last_times

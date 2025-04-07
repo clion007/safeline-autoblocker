@@ -87,7 +87,7 @@ download_file() {
 
 # 下载安装脚本
 echo "正在下载安装脚本..."
-if ! download_file "https://raw.staticdn.net/clion007/safeline-auto-blocker/main/install_auto_blocker.py" "/tmp/install_auto_blocker.py"; then
+if ! download_file "https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py" "/tmp/install_auto_blocker.py"; then
     echo "下载安装脚本失败，安装中止"
     exit 1
 fi

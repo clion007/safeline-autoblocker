@@ -19,6 +19,8 @@ import urllib.request
 import getpass
 import time
 import subprocess
+import argparse
+import configparser
 from cryptography.fernet import Fernet
 
 # 导入配置模块中的路径定义
@@ -49,12 +51,6 @@ except ImportError:
             os.path.join(INSTALL_DIR, 'uninstall_auto_blocker.py')
         ]
     }
-import argparse
-import configparser
-import getpass
-import urllib.request
-import shutil
-from cryptography.fernet import Fernet
 
 def print_banner():
     """打印横幅"""
@@ -150,7 +146,7 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    url = 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
     if download_file(url, script_path):
         os.chmod(script_path, 0o755)  # 添加执行权限
         print(f"下载脚本文件: {script_path}")
@@ -162,27 +158,31 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
     
     success = True
     for file_info in module_files:
+        print(f"正在下载 {os.path.basename(file_info['path'])}...")
         if not download_file(file_info['url'], file_info['path']):
+            print(f"下载文件 {file_info['path']} 失败")
             success = False
+        else:
+            print(f"下载文件: {file_info['path']}")
     
     return success
 
@@ -190,23 +190,26 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
         }
     ]
     
     success = True
     for file_info in files_to_download:
-        if download_file(file_info['url'], file_info['path']):
+        print(f"正在下载 {os.path.basename(file_info['path'])}...")
+        if not download_file(file_info['url'], file_info['path']):
+            print(f"下载文件 {file_info['path']} 失败")
+            success = False
+        else:
             # 为卸载脚本添加执行权限
             if file_info['path'].endswith('.py') or file_info['path'].endswith('.sh'):
                 os.chmod(file_info['path'], 0o755)
-        else:
-            success = False
+            print(f"下载文件: {file_info['path']}")
     
     return success
 
@@ -279,7 +282,7 @@ def create_config(paths, key):
         'SAFELINE_HOST': host,
         'SAFELINE_PORT': port,
         'SAFELINE_TOKEN_ENCRYPTED': encrypted_token,
-        'DEFAULT_IP_GROUP': default_ip_group,
+        'DEFAULT_IP_GROUP': f'"{default_ip_group}"',  # 添加引号
         'USE_TYPE_GROUPS': str(use_type_groups),
         'ATTACK_TYPES_FILTER': attack_types_filter,
         'QUERY_INTERVAL': query_interval,
@@ -291,22 +294,22 @@ def create_config(paths, key):
     # 添加攻击类型到IP组的映射
     config['TYPE_GROUP_MAPPING'] = {
         # 高危攻击类型加入黑名单组
-        '0': '黑名单',  # SQL注入
-        '5': '黑名单',  # 后门
-        '7': '黑名单',  # 代码执行
-        '8': '黑名单',  # 代码注入
-        '9': '黑名单',  # 命令注入
-        '11': '黑名单', # 文件包含
-        '29': '黑名单', # 模板注入
+        '0': '"黑名单"',  # SQL注入
+        '5': '"黑名单"',  # 后门
+        '7': '"黑名单"',  # 代码执行
+        '8': '"黑名单"',  # 代码注入
+        '9': '"黑名单"',  # 命令注入
+        '11': '"黑名单"', # 文件包含
+        '29': '"黑名单"', # 模板注入
         
         # 低危攻击类型加入人机验证组
-        '1': '人机验证',  # XSS
-        '2': '人机验证',  # CSRF
-        '3': '人机验证',  # SSRF
-        '4': '人机验证',  # 拒绝服务
-        '6': '人机验证',  # 反序列化
-        '10': '人机验证', # 文件上传
-        '21': '人机验证'  # 扫描器
+        '1': '"人机验证"',  # XSS
+        '2': '"人机验证"',  # CSRF
+        '3': '"人机验证"',  # SSRF
+        '4': '"人机验证"',  # 拒绝服务
+        '6': '"人机验证"',  # 反序列化
+        '10': '"人机验证"', # 文件上传
+        '21': '"人机验证"'  # 扫描器
     }
     
     try:
@@ -350,7 +353,7 @@ SAFELINE_PORT = 9443
 SAFELINE_TOKEN_ENCRYPTED = {encrypted_token}
 
 # 默认IP组名称
-DEFAULT_IP_GROUP = 人机验证
+DEFAULT_IP_GROUP = "人机验证"
 
 # 是否使用攻击类型分组
 USE_TYPE_GROUPS = true
@@ -404,7 +407,7 @@ def download_main_script(paths):
             return False
     
     # 下载脚本
-    url = 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    url = 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
     if download_file(url, script_path):
         os.chmod(script_path, 0o755)  # 添加执行权限
         print(f"下载脚本文件: {script_path}")
@@ -417,25 +420,25 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
     
     success = True
-    for file_info in module_files:  # 修复：使用module_files而不是files_to_download
+    for file_info in module_files:
         try:
             print(f"正在下载 {os.path.basename(file_info['path'])}...")
             urllib.request.urlretrieve(file_info['url'], file_info['path'])
@@ -451,11 +454,11 @@ def download_additional_files(paths):
     """下载配置示例文件和卸载脚本文件"""
     files_to_download = [
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
             'path': paths['INSTALL_CONFIG_EXAMPLE']
         },
         {
-            'url': 'https://raw.staticdn.net/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'url': 'https://raw.kkgithub.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
         }
     ]

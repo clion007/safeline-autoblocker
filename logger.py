@@ -108,14 +108,17 @@ class LoggerManager:
         """获取日志目录"""
         return self.log_dir
     
-    def clean_old_logs(self, retention_days):
+    def clean_old_logs(self, retention_days, log_directory=None):
         """清理旧日志文件"""
         try:
+            # 使用传入的日志目录或默认目录
+            log_dir = log_directory or self.log_dir
+            
             # 计算截止日期
             cutoff_date = datetime.now() - timedelta(days=retention_days)
             
             # 查找所有日志文件
-            log_pattern = os.path.join(self.log_dir, "*.log*")
+            log_pattern = os.path.join(log_dir, "*.log*")
             log_files = glob.glob(log_pattern)
             
             # 统计删除的文件数量
@@ -138,6 +141,6 @@ class LoggerManager:
 # 创建全局日志管理器实例
 logger_manager = LoggerManager.get_instance()
 
-def clean_old_logs(retention_days):
+def clean_old_logs(retention_days, log_directory=None):
     """清理旧日志文件（兼容旧代码）"""
-    logger_manager.clean_old_logs(retention_days)
+    logger_manager.clean_old_logs(retention_days, log_directory)

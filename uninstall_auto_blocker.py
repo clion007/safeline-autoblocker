@@ -138,15 +138,17 @@ def remove_logs():
 def remove_script():
     """删除脚本文件"""
     script_files = PATHS['SCRIPT_FILES']
+    current_script = os.path.abspath(__file__)
     
     files_removed = True
     
     for script_file in script_files:
-        if os.path.exists(script_file) and (script_file != __file__ or os.path.basename(script_file) == 'uninstall_auto_blocker.py'):
+        # 跳过当前正在执行的卸载脚本
+        if os.path.exists(script_file) and os.path.abspath(script_file) != current_script:
             try:
                 os.remove(script_file)
                 print(f"删除脚本文件: {script_file}")
-            except Exception as error:  # 修改: 使用更具描述性的变量名
+            except Exception as error:
                 print(f"删除脚本文件失败: {script_file}, 错误: {str(error)}")
                 files_removed = False
     
