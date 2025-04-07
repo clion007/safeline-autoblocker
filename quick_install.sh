@@ -45,7 +45,12 @@ mkdir -p /tmp
 
 # 下载安装脚本
 echo "正在下载安装脚本..."
-wget -O /tmp/install_auto_blocker.py https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py
+wget --tries=3 --timeout=15 --retry-connrefused -O /tmp/install_auto_blocker.py https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py
+
+if [ $? -ne 0 ]; then
+    echo "下载安装脚本失败，安装中止"
+    exit 1
+fi
 
 # 添加执行权限
 chmod +x /tmp/install_auto_blocker.py
@@ -53,6 +58,11 @@ chmod +x /tmp/install_auto_blocker.py
 # 运行安装脚本
 echo "正在运行安装脚本..."
 python3 /tmp/install_auto_blocker.py
+
+if [ $? -ne 0 ]; then
+    echo "安装脚本执行失败"
+    exit 1
+fi
 
 # 清理临时文件
 rm -f /tmp/install_auto_blocker.py
