@@ -27,6 +27,11 @@
 ```bash
 wget -O - https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
 ```
+或者
+
+```bash
+curl -sSL https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
+```
 
 ### 手动安装
 

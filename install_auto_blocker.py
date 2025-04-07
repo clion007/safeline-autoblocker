@@ -17,6 +17,8 @@ import sys
 import shutil
 import urllib.request
 import getpass
+import time
+import subprocess
 from cryptography.fernet import Fernet
 
 # 导入配置模块中的路径定义
@@ -87,6 +89,75 @@ def create_directories(paths):
     return True
 
 # 添加下载模块文件的函数
+def download_file(url, destination, max_retries=3):
+    """
+    通用下载函数，支持curl、wget和urllib，带重试逻辑
+    """
+    print(f"正在下载: {url}")
+    
+    # 检查是否有curl
+    curl_available = shutil.which('curl') is not None
+    # 检查是否有wget
+    wget_available = shutil.which('wget') is not None
+    
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            if curl_available:
+                # 使用curl下载，带重试和超时
+                result = subprocess.run(
+                    ['curl', '--fail', '--silent', '--location', '--connect-timeout', '15', 
+                     '--retry', '3', '--retry-delay', '2', '--output', destination, url],
+                    check=True
+                )
+                return True
+            elif wget_available:
+                # 使用wget下载，带重试和超时
+                result = subprocess.run(
+                    ['wget', '--quiet', '--tries=3', '--timeout=15', '--retry-connrefused',
+                     '--output-document', destination, url],
+                    check=True
+                )
+                return True
+            else:
+                # 如果都不可用，使用Python的urllib
+                urllib.request.urlretrieve(url, destination)
+                return True
+        except Exception as error:
+            retry_count += 1
+            if retry_count < max_retries:
+                print(f"下载失败，正在尝试第 {retry_count} 次重试...")
+                time.sleep(2)
+            else:
+                print(f"下载失败: {str(error)}")
+                return False
+    
+    return False
+
+def download_main_script(paths):
+    """下载主监控脚本"""
+    script_dir = paths['INSTALL_DIR']
+    script_path = os.path.join(script_dir, 'safeline_auto_blocker.py')
+    
+    # 确保目录存在
+    if not os.path.exists(script_dir):
+        try:
+            os.makedirs(script_dir, exist_ok=True)
+            print(f"创建目录: {script_dir}")
+        except Exception as error:
+            print(f"创建目录失败: {str(error)}")
+            return False
+    
+    # 下载脚本
+    url = 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/safeline_auto_blocker.py'
+    if download_file(url, script_path):
+        os.chmod(script_path, 0o755)  # 添加执行权限
+        print(f"下载脚本文件: {script_path}")
+        return True
+    else:
+        return False
+
 def download_module_files(paths):
     """下载模块文件"""
     module_files = [
@@ -110,12 +181,31 @@ def download_module_files(paths):
     
     success = True
     for file_info in module_files:
-        try:
-            print(f"正在下载 {os.path.basename(file_info['path'])}...")
-            urllib.request.urlretrieve(file_info['url'], file_info['path'])
-            print(f"下载文件: {file_info['path']}")
-        except Exception as error:
-            print(f"下载文件 {file_info['path']} 失败: {str(error)}")
+        if not download_file(file_info['url'], file_info['path']):
+            success = False
+    
+    return success
+
+def download_additional_files(paths):
+    """下载配置示例文件和卸载脚本文件"""
+    files_to_download = [
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/auto_blocker.conf.example',
+            'path': paths['INSTALL_CONFIG_EXAMPLE']
+        },
+        {
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/uninstall_auto_blocker.py',
+            'path': os.path.join(paths['INSTALL_DIR'], 'uninstall_auto_blocker.py')
+        }
+    ]
+    
+    success = True
+    for file_info in files_to_download:
+        if download_file(file_info['url'], file_info['path']):
+            # 为卸载脚本添加执行权限
+            if file_info['path'].endswith('.py') or file_info['path'].endswith('.sh'):
+                os.chmod(file_info['path'], 0o755)
+        else:
             success = False
     
     return success
