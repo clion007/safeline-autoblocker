@@ -25,7 +25,7 @@
 使用以下命令一键安装：
 
 ```bash
-wget -O - https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
+wget -O - https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/quick_install.sh | sudo bash
 ```
 
 ### 手动安装
@@ -294,11 +294,3 @@ Clion Nieh - EMAIL: <clion007@126.com>
 
 - 雷池WAF团队提供的API支持
 - 咖啡星人k博客文章提供的指导和帮助
-```
-
-主要更新内容：
-1. 移除了过时的命令行参数说明（--api-monitor和--daemon）
-2. 更新了v1.2.0版本的更新日志，添加了新的变更内容
-3. 重新组织了文档结构，使其更加清晰
-4. 更新了命令行参数表格，只保留当前支持的参数
-5. 移除了过时的手动添加IP的示例命令

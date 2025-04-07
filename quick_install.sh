@@ -45,7 +45,7 @@ mkdir -p /tmp
 
 # 下载安装脚本
 echo "正在下载安装脚本..."
-wget -O /tmp/install_auto_blocker.py https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py
+wget -O /tmp/install_auto_blocker.py https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/install_auto_blocker.py
 
 # 添加执行权限
 chmod +x /tmp/install_auto_blocker.py
@@ -59,8 +59,8 @@ rm -f /tmp/install_auto_blocker.py
 
 echo "
 安装完成！您可以使用以下命令管理服务:
-  启动服务: systemctl start safeline_auto_blocker
-  停止服务: systemctl stop safeline_auto_blocker
-  查看状态: systemctl status safeline_auto_blocker
-  查看日志: journalctl -u safeline_auto_blocker -f
+  启动服务: systemctl start safeline-auto-blocker
+  停止服务: systemctl stop safeline-auto-blocker
+  查看状态: systemctl status safeline-auto-blocker
+  查看日志: journalctl -u safeline-auto-blocker -f
 "

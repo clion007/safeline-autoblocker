@@ -91,19 +91,19 @@ def download_module_files(paths):
     """下载模块文件"""
     module_files = [
         {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/api.py',
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/api.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'api.py')
         },
         {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/config.py',
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/config.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'config.py')
         },
         {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/logger.py',
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/logger.py',
             'path': os.path.join(paths['INSTALL_DIR'], 'logger.py')
         },
         {
-            'url': 'https://raw.gitmirror.com/clion007/safeline-auto-blocker/main/__init__.py',
+            'url': 'https://ghproxy.com/https://raw.githubusercontent.com/clion007/safeline-auto-blocker/main/__init__.py',
             'path': os.path.join(paths['INSTALL_DIR'], '__init__.py')
         }
     ]
@@ -299,7 +299,6 @@ CONFIG_RELOAD_INTERVAL = 300
         print(f"创建配置文件失败: {str(error)}")
         return False
 
-# 修改下载主脚本函数，使用更稳定的镜像
 def download_main_script(paths):
     """下载主监控脚本"""
     script_dir = paths['INSTALL_DIR']
