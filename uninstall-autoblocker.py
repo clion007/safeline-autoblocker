@@ -4,7 +4,7 @@
 """
 SafeLine AutoBlocker 卸载脚本
 ----------------------------
-用于卸载SafeLine AutoBlocker
+用于卸载 SafeLine AutoBlocker
 
 作者: Clion Nieh
 版本: 1.2.0
