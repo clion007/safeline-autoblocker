@@ -68,12 +68,12 @@ CONFIG_SCHEMA = {
             'type': int,
             'validator': lambda x: 1 <= x <= 65535,
             'error_msg': '端口必须在1-65535之间'
-        },
-        'TOKEN': {
+        },       
+        'TOKEN_FILE': {
             'required': True,
             'type': str,
-            'validator': lambda x: len(x) > 0,
-            'error_msg': 'API令牌不能为空'
+            'validator': lambda x: len(x) > 0 and os.path.exists(x),
+            'error_msg': '令牌文件不存在或路径无效'
         },
         'DEFAULT_IP_GROUP': {
             'required': True,
@@ -209,6 +209,17 @@ def get_config_values(config):
             elif 'default' in rules:
                 config_values[key_name] = rules['default']
     
+    # 处理令牌文件 - 新增部分
+    if config.has_option('DEFAULT', 'TOKEN_FILE'):
+        token_file = config.get('DEFAULT', 'TOKEN_FILE')
+        try:
+            with open(token_file, 'r') as file:
+                config_values['token_encrypted'] = file.read().strip()
+            logger.debug(f"从令牌文件读取加密令牌: {token_file}")
+        except Exception as e:
+            logger.error(f"读取令牌文件失败: {e}")
+            config_values['token_encrypted'] = ''
+    
     # 处理类型组映射
     if 'use_type_groups' in config_values and config_values['use_type_groups'] and 'TYPE_GROUP_MAPPING' in config:
         type_group_mapping = {}
@@ -315,7 +326,7 @@ def create_default_config(config_file=None, logger_instance=None):
         'DEFAULT': {
             'HOST': 'localhost',
             'PORT': '9443',
-            'TOKEN': '',  # 需要在安装时设置
+            'TOKEN': '/etc/safeline/token.key',
             'DEFAULT_IP_GROUP': '人机验证',
             'USE_TYPE_GROUPS': 'true',
             'QUERY_INTERVAL': '60',

@@ -13,14 +13,16 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # 无颜色
 
-# 定义路径
-INSTALL_DIR="/opt/safeline/scripts"
+# 定义路径和文件
 CONFIG_DIR="/etc/safeline"
-INSTALL_LOG_DIR="/var/log/safeline"
-SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
 CONFIG_FILE="$CONFIG_DIR/setting.conf"
 KEY_FILE="$CONFIG_DIR/token.key"
+TOKEN_FILE="$CONFIG_DIR/token.enc"
 CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
+INSTALL_DIR="/opt/safeline/scripts"
+INSTALL_LOG_DIR="/var/log/safeline"
+SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
+MAIN_SCRIPT="autoblocker.py"
 UNINSTALL_SCRIPT="uninstall.sh"
 
 # 定义下载源
@@ -184,11 +186,10 @@ download_files() {
     
     # 定义需要下载的文件列表
     local script_files=(
-        "autoblocker.py"
         "api.py"
         "config.py"
         "logger.py"
-        "__init__.py"
+        "$MAIN_SCRIPT"
         "$UNINSTALL_SCRIPT"
     )
     
@@ -215,7 +216,7 @@ download_files() {
     done
     
     # 设置执行权限
-    chmod 755 "$INSTALL_DIR/autoblocker.py"
+    chmod 755 "$INSTALL_DIR/$MAIN_SCRIPT"
     chmod 755 "$INSTALL_DIR/$UNINSTALL_SCRIPT"
     
     # 下载配置示例
@@ -251,8 +252,6 @@ generate_key() {
     echo "$key" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
     echo -e "${GREEN}生成加密密钥: $KEY_FILE${NC}"
-    
-    echo "$key"
     return 0
 }
 
@@ -301,6 +300,11 @@ create_config() {
         return 1
     fi
     
+    # 将加密令牌保存到单独文件
+    echo "$encrypted_token" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    echo -e "${GREEN}创建加密令牌文件: $TOKEN_FILE${NC}"
+    
     # 创建配置文件
     cat > "$CONFIG_FILE" << EOF
 [DEFAULT]
@@ -308,8 +312,8 @@ create_config() {
 SAFELINE_HOST = $host
 SAFELINE_PORT = $port
 
-# 加密后的API令牌
-SAFELINE_TOKEN_ENCRYPTED = $encrypted_token
+# 加密令牌文件路径
+TOKEN_FILE = $TOKEN_FILE
 
 # 默认IP组名称
 DEFAULT_IP_GROUP = "$default_ip_group"
@@ -369,7 +373,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $INSTALL_DIR/autoblocker.py
+ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
 Restart=always
 
 [Install]
@@ -423,6 +427,7 @@ cleanup_files() {
     # 删除配置文件和密钥
     [ -f "$CONFIG_FILE" ] && rm -f "$CONFIG_FILE"
     [ -f "$KEY_FILE" ] && rm -f "$KEY_FILE"
+    [ -f "$TOKEN_FILE" ] && rm -f "$TOKEN_FILE"
     [ -f "$CONFIG_EXAMPLE" ] && rm -f "$CONFIG_EXAMPLE"
     
     # 删除脚本文件

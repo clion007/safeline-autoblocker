@@ -19,13 +19,14 @@ echo "
 "
 
 # 定义路径
-INSTALL_DIR="/opt/safeline/scripts"
 CONFIG_DIR="/etc/safeline"
+INSTALL_DIR="/opt/safeline/scripts"
 INSTALL_LOG_DIR="/var/log/safeline"
+CONFIG_FILE="$CONFIG_DIR/setting.conf"
+KEY_FILE="$CONFIG_DIR/token.key"
+TOKEN_FILE="$CONFIG_DIR/token.enc"
+CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
 SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
-CONFIG_FILE="$CONFIG_DIR/safeline-autoblocker.conf"
-KEY_FILE="$CONFIG_DIR/safeline-autoblocker.key"
-CONFIG_EXAMPLE="$CONFIG_DIR/safeline-autoblocker.conf.example"
 
 # 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
@@ -106,6 +107,11 @@ remove_config() {
     # 删除密钥文件
     if [ -f "$KEY_FILE" ]; then
         rm -f "$KEY_FILE" && echo "删除密钥文件: $KEY_FILE" || echo "删除密钥文件失败"
+    fi
+    
+    # 删除令牌文件
+    if [ -f "$TOKEN_FILE" ]; then
+        rm -f "$TOKEN_FILE" && echo "删除令牌文件: $TOKEN_FILE" || echo "删除令牌文件失败"
     fi
     
     # 删除配置示例文件
