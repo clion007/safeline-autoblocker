@@ -290,7 +290,6 @@ create_config() {
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
     local max_logs=$(get_user_input "每次查询最大日志数量" "100" "false")
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
-    local config_reload_interval=$(get_user_input "配置重新加载间隔（秒）" "300" "false")
     
     # 生成密钥
     local key=$(generate_key)
@@ -323,9 +322,6 @@ MAX_LOGS_PER_QUERY = $max_logs
 
 # 日志保留天数
 LOG_RETENTION_DAYS = $log_retention_days
-
-# 配置重新加载间隔(秒)
-CONFIG_RELOAD_INTERVAL = $config_reload_interval
 
 [TYPE_GROUP_MAPPING]
 # 高危攻击类型加入黑名单组
@@ -409,20 +405,20 @@ cleanup_files() {
     echo -e "${YELLOW}正在清理已安装的文件...${NC}"
     
     # 禁用服务
-    systemctl disable safeline-autoblocker 2>/dev/null
     systemctl stop safeline-autoblocker 2>/dev/null
+    systemctl disable safeline-autoblocker 2>/dev/null
     
     # 删除服务文件
     [ -f "$SERVICE_FILE" ] && rm -f "$SERVICE_FILE" && systemctl daemon-reload
     
-    # 删除配置文件和密钥
-    [ -f "$CONFIG_FILE" ] && rm -f "$CONFIG_FILE"
-    [ -f "$KEY_FILE" ] && rm -f "$KEY_FILE"
-    [ -f "$TOKEN_FILE" ] && rm -f "$TOKEN_FILE"
-    [ -f "$CONFIG_EXAMPLE" ] && rm -f "$CONFIG_EXAMPLE"
+    # 删除配置文件和目录
+    [ -d "$CONFIG_DIR" ] && rm -rf "$CONFIG_DIR"
     
     # 删除脚本文件
-    rm -rf "$INSTALL_DIR" 2>/dev/null
+    rm -rf "../$INSTALL_DIR" 2>/dev/null
+    
+    # 删除安装日志
+    rm -rf "$INSTALL_LOG_DIR" 2>/dev/null
     
     echo -e "${YELLOW}清理完成，安装已回滚${NC}"
 }

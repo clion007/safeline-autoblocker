@@ -22,10 +22,6 @@ echo "
 CONFIG_DIR="/etc/safeline"
 INSTALL_DIR="/opt/safeline/scripts"
 INSTALL_LOG_DIR="/var/log/safeline"
-CONFIG_FILE="$CONFIG_DIR/setting.conf"
-KEY_FILE="$CONFIG_DIR/token.key"
-TOKEN_FILE="$CONFIG_DIR/token.enc"
-CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
 SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
 
 # 检查是否为root用户
@@ -92,46 +88,20 @@ remove_service_file() {
     if [ -f "$SERVICE_FILE" ]; then
         rm -f "$SERVICE_FILE" && echo "删除服务文件: $SERVICE_FILE" || echo "删除服务文件失败"
         systemctl daemon-reload
-    else
-        echo "服务文件不存在: $SERVICE_FILE"
-    fi
 }
 
 # 删除配置文件
 remove_config() {
-    # 删除主配置文件
-    if [ -f "$CONFIG_FILE" ]; then
-        rm -f "$CONFIG_FILE" && echo "删除配置文件: $CONFIG_FILE" || echo "删除配置文件失败"
+    # 删除主配置文件和目录
+    if [ -d "$CONFIG_DIR" ]; then
+        rm -rf "$CONFIG_FILE" && echo "成功删除配置文件及目录: $CONFIG_DIR" || echo "删除配置文件失败"
     fi
-    
-    # 删除密钥文件
-    if [ -f "$KEY_FILE" ]; then
-        rm -f "$KEY_FILE" && echo "删除密钥文件: $KEY_FILE" || echo "删除密钥文件失败"
-    fi
-    
-    # 删除令牌文件
-    if [ -f "$TOKEN_FILE" ]; then
-        rm -f "$TOKEN_FILE" && echo "删除令牌文件: $TOKEN_FILE" || echo "删除令牌文件失败"
-    fi
-    
-    # 删除配置示例文件
-    if [ -f "$CONFIG_EXAMPLE" ]; then
-        rm -f "$CONFIG_EXAMPLE" && echo "删除配置示例文件: $CONFIG_EXAMPLE" || echo "删除配置示例文件失败"
-    fi
-    
-    # 删除隐藏文件
-    hidden_files=("$CONFIG_DIR/.safeline-autoblocker" "$INSTALL_DIR/.safeline-cache")
-    for file in "${hidden_files[@]}"; do
-        if [ -f "$file" ]; then
-            rm -f "$file" && echo "删除隐藏文件: $file" || echo "删除隐藏文件失败: $file"
-        fi
-    done
 }
 
 # 删除脚本文件
 remove_scripts() {
     script_files=(
-        "$INSTALL_DIR/safeline-autoblocker.py"
+        "$INSTALL_DIR/autoblocker.py"
         "$INSTALL_DIR/api.py"
         "$INSTALL_DIR/config.py"
         "$INSTALL_DIR/logger.py"
@@ -153,29 +123,6 @@ remove_logs() {
     fi
 }
 
-# 删除目录
-remove_directories() {
-    # 按长度排序，确保先删除子目录
-    directories=(
-        "$INSTALL_DIR"
-        "$CONFIG_DIR"
-        "$INSTALL_LOG_DIR"
-        "$(dirname "$INSTALL_DIR")"
-        "$(dirname "$INSTALL_LOG_DIR")"
-    )
-    
-    # 等待1秒确保文件操作完成
-    sleep 1
-    
-    for dir in "${directories[@]}"; do
-        if [ -d "$dir" ]; then
-            rm -rf "$dir" && echo "成功删除目录: $dir" || echo "删除目录失败: $dir"
-        else
-            echo "目录不存在: $dir"
-        fi
-    done
-}
-
 # 执行卸载步骤
 stop_service
 service_removed=true
@@ -195,14 +142,13 @@ echo "服务文件: $([ "$service_removed" = true ] && echo '已删除' || echo 
 echo "配置文件: $([ "$config_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "脚本文件: $([ "$script_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "日志文件: $([ "$logs_removed" = true ] && echo '已删除' || echo '删除失败')"
-echo "相关目录: $([ "$dirs_removed" = true ] && echo '已清理' || echo '部分目录未清理')"
 
-if [ "$service_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ] && [ "$logs_removed" = true ] && [ "$dirs_removed" = true ]; then
+if [ "$service_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ] && [ "$logs_removed" = true ]; then
     echo -e "\n✓ 卸载完成！所有组件已成功删除。"
 else
     echo -e "\n⚠ 卸载完成，但部分组件删除失败，请检查上述信息。"
 fi
 
-# 最后删除自身
-echo "卸载脚本将自动删除自身..."
-rm -f "$0"
+# 最后删除自身及相关目录
+echo "卸载脚本将自动删除自身及相关目录..."
+rm -rf "../$INSTALL_DIR"

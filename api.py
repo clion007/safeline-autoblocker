@@ -15,9 +15,6 @@ from datetime import datetime
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# 导入路径常量
-from config import PATHS
-
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 

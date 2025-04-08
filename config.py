@@ -96,11 +96,6 @@ CONFIG_SCHEMA = {
             'default': 30,
             'required': False
         },
-        'CONFIG_RELOAD_INTERVAL': {
-            'type': int,
-            'default': CONFIG_RELOAD_INTERVAL,
-            'required': False
-        },
         'ATTACK_TYPES_FILTER': {
             'type': str,
             'default': '',
