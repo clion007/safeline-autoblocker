@@ -65,7 +65,6 @@ class SafeLineAPI:
         self.host = host
         self.port = port
         self.token = token
-        self.headers = {'Authorization': f'Bearer {token}'}
         self.session = requests.Session()
         self.logger = logger_instance or logger_manager.get_logger('safeline-autoblocker')
         
@@ -329,7 +328,7 @@ def get_attack_type_name(attack_type_id, attack_type_names_dict=None):
     return f"未知类型({attack_type_id})"
 
 # 修改 process_log_entry 函数
-def process_log_entry(log_entry, api, default_ip_group, use_type_groups, type_group_mapping, attack_types_filter, logger_instance=None, attack_type_names_dict=None):
+def process_log_entry(log_entry, api, low_risk_ip_group, high_risk_ip_group, type_group_mapping, attack_types_filter, logger_instance=None, attack_type_names_dict=None):
     """处理单个日志条目"""
     # 使用日志管理器获取日志记录器
     logger_to_use = logger_instance or logger_manager.get_logger()
@@ -348,17 +347,17 @@ def process_log_entry(log_entry, api, default_ip_group, use_type_groups, type_gr
     
     # 如果设置了攻击类型过滤，检查是否在过滤列表中
     if attack_types_filter and str(attack_type) not in attack_types_filter:
-        # 对于不在过滤列表中的攻击类型，将其IP添加到人机验证组
+        # 对于不在过滤列表中的攻击类型，将其IP添加到低危IP组
         attack_type_name = get_attack_type_name(attack_type, attack_type_names_dict)
         reason = f"未列举攻击类型: {attack_type_name} - {url}"
-        return api.add_ip_to_group(ip, reason, default_ip_group)
+        return api.add_ip_to_group(ip, reason, low_risk_ip_group)
     
     # 获取攻击类型名称
     attack_type_name = get_attack_type_name(attack_type, attack_type_names_dict)
     
     # 确定IP组
-    ip_group = default_ip_group
-    if use_type_groups and str(attack_type) in type_group_mapping:
+    ip_group = low_risk_ip_group  # 默认使用低危IP组
+    if str(attack_type) in type_group_mapping:
         ip_group = type_group_mapping[str(attack_type)]
     
     # 构建原因
@@ -373,24 +372,23 @@ def create_api_instance(config_values, logger_instance=None):
     logger_to_use = logger_instance or logger_manager.get_logger()
     
     # 获取配置值
-    host = config_values.get('safeline_host', 'localhost')
-    port = config_values.get('safeline_port', 9443)
-    token = config_values.get('safeline_token_encrypted', '')
+    host = config_values.get('host', 'localhost')
+    port = config_values.get('port', 9443)
+    token_encrypted = config_values.get('token_encrypted', '')
     
     # 如果令牌是加密的，尝试解密
-    if token.startswith('gAAAAAB'):
+    if token_encrypted.startswith('gAAAAAB'):
         try:
-            # 修改: 使用get_effective_key_file()获取密钥文件路径
-            from config import get_effective_key_file, decrypt_token
-            key_file_path = get_effective_key_file()
+            from config import get_key_file, decrypt_token
+            key_file_path = get_key_file()
             with open(key_file_path, 'r') as key_file:
                 key = key_file.read().strip()
-            token = decrypt_token(token, key)
+            token = decrypt_token(token_encrypted, key)
         except Exception as error:
             logger_to_use.error(f"解密令牌失败: {str(error)}")
             return None
     
-    # 创建API实例
+    # 创建 API 实例
     try:
         api = SafeLineAPI(
             host=host,

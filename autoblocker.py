@@ -67,8 +67,8 @@ def process_attack_logs(api, config_values, logger_instance=None):
     logger_to_use = logger_instance or logger_manager.get_logger()
     
     # 获取配置值
-    default_ip_group = config_values.get('default_ip_group')
-    use_type_groups = config_values.get('use_type_groups')
+    high_risk_ip_group = config_values.get('high_risk_ip_group')
+    low_risk_ip_group = config_values.get('low_risk_ip_group')
     type_group_mapping = config_values.get('type_group_mapping', {})
     attack_types_filter = config_values.get('attack_types_filter')
     max_logs = config_values.get('max_logs_per_query')
@@ -85,8 +85,8 @@ def process_attack_logs(api, config_values, logger_instance=None):
     # 处理每条日志
     processed_count = 0
     for log_entry in logs:
-        if process_log_entry(log_entry, api, default_ip_group, use_type_groups, 
-                            type_group_mapping, attack_types_filter, logger_to_use):
+        if process_log_entry(log_entry, api, low_risk_ip_group, high_risk_ip_group, 
+                          type_group_mapping, attack_types_filter, logger_to_use):
             processed_count += 1
     
     if processed_count > 0:

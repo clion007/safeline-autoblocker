@@ -19,11 +19,11 @@ CONFIG_FILE="$CONFIG_DIR/setting.conf"
 KEY_FILE="$CONFIG_DIR/token.key"
 TOKEN_FILE="$CONFIG_DIR/token.enc"
 CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
+MAIN_SCRIPT="autoblocker.py"
+UNINSTALL_SCRIPT="uninstall.sh"
 INSTALL_DIR="/opt/safeline/scripts"
 INSTALL_LOG_DIR="/var/log/safeline"
 SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
-MAIN_SCRIPT="autoblocker.py"
-UNINSTALL_SCRIPT="uninstall.sh"
 
 # 定义下载源
 REPO_URL="https://gitee.com/clion007/safeline-autoblocker/raw/main"
@@ -249,6 +249,7 @@ generate_key() {
         return 1
     fi
     
+    # 将密钥保存到文件
     echo "$key" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
     echo -e "${GREEN}生成加密密钥: $KEY_FILE${NC}"
@@ -268,7 +269,11 @@ encrypt_token() {
         return 1
     fi
     
-    echo "$encrypted_token"
+    # 将加密令牌保存到文件
+    echo "$encrypted_token" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    echo -e "${GREEN}创建加密令牌文件: $TOKEN_FILE${NC}"
+    
     return 0
 }
 
@@ -280,11 +285,10 @@ create_config() {
     local host=$(get_user_input "雷池API地址" "localhost" "false")
     local port=$(get_user_input "雷池API端口" "9443" "false")
     local token=$(get_user_input "雷池API令牌" "" "true")
-    local default_ip_group=$(get_user_input "默认IP组名称" "人机验证" "false")
-    local use_type_groups=$(get_user_input "是否为不同攻击类型配置不同IP组? (y/n)" "y" "false" "y,n")
+    local high_risk_ip_group=$(get_user_input "高危攻击IP组名称" "黑名单" "false")
+    local low_risk_ip_group=$(get_user_input "低危攻击IP组名称" "人机验证" "false")
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
     local max_logs=$(get_user_input "每次查询最大日志数量" "100" "false")
-    local debug_mode=$(get_user_input "是否启用调试模式? (y/n)" "n" "false" "y,n")
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
     local config_reload_interval=$(get_user_input "配置重新加载间隔（秒）" "300" "false")
     
@@ -300,11 +304,6 @@ create_config() {
         return 1
     fi
     
-    # 将加密令牌保存到单独文件
-    echo "$encrypted_token" > "$TOKEN_FILE"
-    chmod 600 "$TOKEN_FILE"
-    echo -e "${GREEN}创建加密令牌文件: $TOKEN_FILE${NC}"
-    
     # 创建配置文件
     cat > "$CONFIG_FILE" << EOF
 [DEFAULT]
@@ -312,23 +311,15 @@ create_config() {
 SAFELINE_HOST = $host
 SAFELINE_PORT = $port
 
-# 加密令牌文件路径
-TOKEN_FILE = $TOKEN_FILE
-
-# 默认IP组名称
-DEFAULT_IP_GROUP = "$default_ip_group"
-
-# 是否使用攻击类型分组
-USE_TYPE_GROUPS = $([ "$use_type_groups" = "y" ] && echo "true" || echo "false")
+# IP组名称
+HIGH_RISK_IP_GROUP = "$high_risk_ip_group"
+LOW_RISK_IP_GROUP = "$low_risk_ip_group"
 
 # 查询间隔(秒)
 QUERY_INTERVAL = $query_interval
 
 # 每次查询最大日志数量
 MAX_LOGS_PER_QUERY = $max_logs
-
-# 调试模式
-DEBUG_MODE = $([ "$debug_mode" = "y" ] && echo "true" || echo "false")
 
 # 日志保留天数
 LOG_RETENTION_DAYS = $log_retention_days
@@ -338,22 +329,22 @@ CONFIG_RELOAD_INTERVAL = $config_reload_interval
 
 [TYPE_GROUP_MAPPING]
 # 高危攻击类型加入黑名单组
-0 = "黑名单"  # SQL注入
-5 = "黑名单"  # 后门
-7 = "黑名单"  # 代码执行
-8 = "黑名单"  # 代码注入
-9 = "黑名单"  # 命令注入
-11 = "黑名单" # 文件包含
-29 = "黑名单" # 模板注入
+0 = "$high_risk_ip_group"  # SQL注入
+5 = "$high_risk_ip_group"  # 后门
+7 = "$high_risk_ip_group"  # 代码执行
+8 = "$high_risk_ip_group"  # 代码注入
+9 = "$high_risk_ip_group"  # 命令注入
+11 = "$high_risk_ip_group" # 文件包含
+29 = "$high_risk_ip_group" # 模板注入
 
 # 低危攻击类型加入人机验证组
-1 = "人机验证"  # XSS
-2 = "人机验证"  # CSRF
-3 = "人机验证"  # SSRF
-4 = "人机验证"  # 拒绝服务
-6 = "人机验证"  # 反序列化
-10 = "人机验证" # 文件上传
-21 = "人机验证" # 扫描器
+1 = "$low_risk_ip_group"  # XSS
+2 = "$low_risk_ip_group"  # CSRF
+3 = "$low_risk_ip_group"  # SSRF
+4 = "$low_risk_ip_group"  # 拒绝服务
+6 = "$low_risk_ip_group"  # 反序列化
+10 = "$low_risk_ip_group" # 文件上传
+21 = "$low_risk_ip_group" # 扫描器
 EOF
     
     chmod 600 "$CONFIG_FILE"
