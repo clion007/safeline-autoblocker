@@ -80,35 +80,23 @@ class ConfigManager:
         
         # 检查并补充所有配置
         for section, options in self.DEFAULT_CONFIG.items():
-            # 修正：为 GENERAL 段创建配置
-            if section == 'GENERAL':
-                if not config.has_section(section):
-                    config.add_section(section)
+            if not config.has_section(section):
+                config.add_section(section)
+                is_modified = True
+            for option, value in options.items():
+                if not config.has_option(section, option):
+                    config.set(section, option, str(value))
                     is_modified = True
-                for option, value in options.items():
-                    if not config.has_option(section, option):
-                        config.set(section, option, str(value))
-                        is_modified = True
-            else:
-                if section not in config.sections():
-                    config.add_section(section)
-                    is_modified = True
-                for option, value in options.items():
-                    if not config.has_option(section, option):
-                        config.set(section, option, str(value))
-                        is_modified = True
         
         if is_modified:
-            self.logger.warning("配置文件不完整，已自动补充缺失配置")
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 config.write(f)
         
-        return True
+        return is_modified
 
     def create_default_config(self):
         """创建默认配置文件"""
         if os.path.exists(self.CONFIG_FILE):
-            self.logger.warning(f"配置文件已存在: {self.CONFIG_FILE}")
             return False
         
         return self.set_value(self.DEFAULT_CONFIG)
@@ -119,24 +107,21 @@ class ConfigManager:
         
         try:
             if not os.path.exists(self.CONFIG_FILE):
-                self.logger.warning(f"配置文件不存在，创建默认配置: {self.CONFIG_FILE}")
                 if not self.create_default_config():
                     return False
-        
-            config.read(self.CONFIG_FILE)
-            # 验证并修复配置
-            self._validate_and_repair_config(config)
+                config.read(self.CONFIG_FILE)
+            else:
+                config.read(self.CONFIG_FILE)
+                if self._validate_and_repair_config(config):
+                    config.read(self.CONFIG_FILE)
             
             self._config = config
             return True
             
         except Exception as error:
             self.logger.error(f"读取配置文件时出错: {str(error)}")
-            self.logger.warning("尝试重新创建默认配置")
-            if not self.create_default_config():
-                return False
-            return self.load()
-    
+            return False
+
     def get_value(self, section, option):
         """获取配置项的值
         
@@ -148,13 +133,8 @@ class ConfigManager:
             配置值
         """
         try:
-            # 获取配置值
-            if section == 'GENERAL':
-                value = self._config.get('GENERAL', option)  # 直接从 GENERAL 段获取
-            else:
-                value = self._config.get(section, option)
+            value = self._config.get(section, option)
             
-            # 根据配置项进行类型转换
             if option in {'SAFELINE_PORT', 'QUERY_INTERVAL', 'MAX_LOGS_PER_QUERY', 'LOG_RETENTION_DAYS'}:
                 return int(value)
             return value
@@ -162,6 +142,33 @@ class ConfigManager:
         except Exception as error:
             self.logger.error(f"获取配置项 {section}.{option} 时出错: {error}")
             raise
+
+    def set_value(self, section, option, value=None):
+        try:
+            config_data = section if isinstance(section, dict) else {section: {option: value}}
+            
+            # 更新配置
+            modified = False
+            for sec, options in config_data.items():
+                if not self._config.has_section(sec):
+                    self._config.add_section(sec)
+                    modified = True
+                for opt, val in options.items():
+                    current_val = self._config.get(sec, opt, fallback=None)
+                    if current_val != str(val):
+                        self._config.set(sec, opt, str(val))
+                        modified = True
+            
+            if modified:
+                os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
+                with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                    self._config.write(f)
+            
+            return True
+            
+        except Exception as error:
+            self.logger.error(f"更新配置失败: {error}")
+            return False
 
     def get_token(self):
         try:
@@ -192,64 +199,18 @@ class ConfigManager:
 
     def update_token(self, new_token):
         try:
-            # 直接使用类常量
             with open(self.KEY_FILE, 'r') as key_file:
                 key = key_file.read().strip()
             
-            # 加密新令牌
             from cryptography.fernet import Fernet
             fernet = Fernet(key.encode())
             encrypted_token = fernet.encrypt(new_token.encode()).decode()
             
-            # 保存加密后的令牌
             with open(self.TOKEN_FILE, 'w') as token_file:
                 token_file.write(encrypted_token)
             
-            self.logger.info("令牌已更新并加密保存")
             return True
             
         except Exception as error:
             self.logger.error(f"更新令牌失败: {error}")
-            return False
-
-    def set_value(self, section, option, value=None):
-        """设置配置项的值
-        
-        Args:
-            section: 配置段名称或配置数据字典
-            option: 配置项名称，当section为字典时忽略此参数
-            value: 配置值，当section为字典时忽略此参数
-            
-        Returns:
-            bool: 更新成功返回True，失败返回False
-        """
-        try:
-            if not self._config:
-                return False
-            
-            config_data = {}
-            if isinstance(section, dict):
-                # 批量更新模式
-                config_data = section
-            else:
-                # 单值更新模式
-                config_data = {section: {option: value}}
-            
-            # 更新配置
-            for sec, options in config_data.items():
-                if not self._config.has_section(sec) and sec != 'GENERAL':
-                    self._config.add_section(sec)
-                for opt, val in options.items():
-                    self._config.set(sec, opt, str(val))
-            
-            # 保存到文件
-            os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
-            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                self._config.write(f)
-            
-            self.logger.info("配置已更新")
-            return True
-            
-        except Exception as error:
-            self.logger.error(f"更新配置失败: {error}")
             return False
