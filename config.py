@@ -48,12 +48,12 @@ class ConfigManager:
         """加载配置文件"""
         config = configparser.ConfigParser()
         
-        if not os.path.exists(CONFIG_FILE):
-            self.logger.error(f"配置文件不存在: {CONFIG_FILE}")
+        if not os.path.exists(self.CONFIG_FILE):
+            self.logger.error(f"配置文件不存在: {self.CONFIG_FILE}")
             return False
         
         try:
-            config.read(CONFIG_FILE)
+            config.read(self.CONFIG_FILE)
             self.config = config
             self.config_values = self._get_all_values()
             return True
@@ -114,15 +114,15 @@ class ConfigManager:
     
     def create_default_config(self):
         """创建默认配置文件"""
-        if os.path.exists(CONFIG_FILE):
-            self.logger.warning(f"配置文件已存在: {CONFIG_FILE}")
+        if os.path.exists(self.CONFIG_FILE):
+            self.logger.warning(f"配置文件已存在: {self.CONFIG_FILE}")
             return False
         
         default_config = {
             'DEFAULT': {
                 'SAFELINE_HOST': 'localhost',
                 'SAFELINE_PORT': '9443',
-                'TOKEN': get_path('key_file'),
+                'TOKEN': self.get_path('key_file'),  # 修改这里
                 'HIGH_RISK_IP_GROUP': '黑名单',
                 'LOW_RISK_IP_GROUP': '人机验证',
                 'QUERY_INTERVAL': '60',
@@ -155,9 +155,8 @@ class ConfigManager:
         try:
             config = configparser.ConfigParser()
             
-            # 如果文件存在，先读取现有配置
-            if os.path.exists(CONFIG_FILE):
-                config.read(CONFIG_FILE)
+            if os.path.exists(self.CONFIG_FILE):
+                config.read(self.CONFIG_FILE)
             
             # 更新配置
             for section, options in config_data.items():
@@ -167,10 +166,9 @@ class ConfigManager:
                     config.set(section, option, str(value))
             
             # 确保配置目录存在
-            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
             
-            # 写入配置文件
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 config.write(f)
             
             self.logger.info(f"配置文件已更新: {CONFIG_FILE}")
@@ -236,12 +234,8 @@ class ConfigManager:
         logger_to_use = logger_instance or get_logger_manager().get_logger()
         
         try:
-            # 读取现有密钥
+            # 读取密钥
             key_file_path = cls.get_path('key_file')
-            if not os.path.exists(key_file_path):
-                logger_to_use.error(f"密钥文件不存在: {key_file_path}")
-                return False
-                
             with open(key_file_path, 'r') as key_file:
                 key = key_file.read().strip()
             
@@ -252,7 +246,6 @@ class ConfigManager:
             
             # 保存加密后的令牌
             token_file_path = cls.get_path('token_file')
-            os.makedirs(os.path.dirname(token_file_path), exist_ok=True)
             with open(token_file_path, 'w') as token_file:
                 token_file.write(encrypted_token)
             
