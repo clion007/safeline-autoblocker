@@ -68,10 +68,6 @@ class ConfigManager:
     _instance = None
     _lock = threading.Lock()
     
-    def __init__(self):
-        """保护初始化方法，请使用 get_instance()"""
-        raise RuntimeError("请使用 get_instance() 方法获取实例")
-    
     @classmethod
     def get_instance(cls):
         """获取配置管理器实例（线程安全）"""

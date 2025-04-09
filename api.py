@@ -5,35 +5,15 @@
 API交互模块
 """
 import time
-import logging
 import requests
 from datetime import datetime
+from logger import LoggerManager
+from config import ConfigManager
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# 获取日志记录器
-logger = logging.getLogger(__name__)
-
 class SafeLineAPI:
     """雷池WAF API交互类"""
-    
-    # 定义攻击类型常量映射
-    ATTACK_TYPES = {
-        0: "SQL注入",
-        1: "XSS",
-        2: "CSRF",
-        3: "SSRF",
-        4: "拒绝服务",
-        5: "后门",
-        6: "反序列化",
-        7: "代码执行",
-        8: "代码注入",
-        9: "命令注入",
-        10: "文件上传",
-        11: "文件包含",
-        21: "扫描器",
-        29: "模板注入"
-    }
     
     def __init__(self, host, port, token, logger_instance=None, **kwargs):
         """初始化API客户端"""
@@ -42,11 +22,14 @@ class SafeLineAPI:
         self.token = token
         self.logger = logger_instance or LoggerManager.get_instance().get_logger()
         
-        # 设置默认参数
-        self.cache_expiry = kwargs.get('cache_expiry', 3600)  # 1小时
-        self.ip_batch_size = kwargs.get('ip_batch_size', 20)
-        self.ip_batch_interval = kwargs.get('ip_batch_interval', 10)
-        self.ip_groups_cache_ttl = kwargs.get('ip_groups_cache_ttl', 300)  # 5分钟
+        # 从配置管理器获取配置
+        config_manager = ConfigManager.get_instance()
+        
+        # 设置参数
+        self.cache_expiry = config_manager.get_value('api', 'cache_expiry')
+        self.ip_batch_size = config_manager.get_value('api', 'ip_batch_size')
+        self.ip_batch_interval = config_manager.get_value('api', 'ip_batch_interval')
+        self.ip_groups_cache_ttl = config_manager.get_value('api', 'ip_groups_cache_ttl')
         
         self.session = requests.Session()
         self.headers = {
@@ -283,45 +266,21 @@ class SafeLineAPI:
 
     def get_attack_type_name(self, attack_type_id):
         """获取攻击类型名称"""
+        config_manager = ConfigManager.get_instance()
+        attack_types = config_manager.get_value('attack_types', 'types')
         attack_type_id = str(attack_type_id)
-        return self.ATTACK_TYPES.get(int(attack_type_id), f"未知类型({attack_type_id})")
-    
-    def process_log_entry(self, log_entry, low_risk_ip_group, high_risk_ip_group, type_group_mapping, attack_types_filter):
-        """处理单个日志条目"""
-        ip = log_entry.get('src_ip')
-        attack_type = log_entry.get('attack_type')
-        url = log_entry.get('website', '')
-        
-        if not ip or attack_type is None or attack_type == -3:
-            return False
-        
-        # 处理攻击类型过滤
-        if attack_types_filter and str(attack_type) not in attack_types_filter:
-            attack_type_name = self.get_attack_type_name(attack_type)
-            reason = f"未列举攻击类型: {attack_type_name} - {url}"
-            return self.add_ip_to_group(ip, reason, low_risk_ip_group)
-        
-        # 确定目标IP组
-        attack_type_name = self.get_attack_type_name(attack_type)
-        ip_group = type_group_mapping.get(str(attack_type), low_risk_ip_group)
-        reason = f"{attack_type_name} - {url}"
-        
-        return self.add_ip_to_group(ip, reason, ip_group)
+        return attack_types.get(attack_type_id, f"未知类型({attack_type_id})")
 
-from config import get_path
-
-def create_api_instance(config_values, logger_instance=None):
+def create_api_instance(config_manager, logger_instance=None):
     """创建API实例"""
-    # 使用日志管理器获取日志记录器
-    logger_to_use = logger_instance or get_logger_manager().get_logger()
+    logger_to_use = logger_instance or LoggerManager.get_instance().get_logger()
     
     try:
         # 获取配置值
-        host = config_values.get('host', 'localhost')
-        port = config_values.get('port', 9443)
+        host = config_manager.get_value('api', 'host')
+        port = config_manager.get_value('api', 'port')
+        token = config_manager.get_token()
         
-        # 使用 ConfigManager 获取解密后的令牌
-        token = ConfigManager.get_token(config_values, logger_instance)
         if not token:
             logger_to_use.error("无法获取有效的API令牌")
             return None
@@ -331,11 +290,7 @@ def create_api_instance(config_values, logger_instance=None):
             host=host,
             port=port,
             token=token,
-            logger_instance=logger_to_use,
-            ip_batch_size=config_values.get('ip_batch_size'),
-            ip_batch_interval=config_values.get('ip_batch_interval'),
-            cache_expiry=config_values.get('cache_expiry'),
-            ip_groups_cache_ttl=config_values.get('ip_groups_cache_ttl')
+            logger_instance=logger_to_use
         )
         
         logger_to_use.info(f"成功创建API实例，连接到 {host}:{port}")

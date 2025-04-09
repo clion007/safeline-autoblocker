@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 日志管理模块
@@ -13,13 +12,13 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
 class LoggerManager:
-    # 日志相关常量
+    # 定义日志相关常量
     BACKUP_COUNT = 5
     LOG_DIR = "logs"
     LOG_LEVEL = logging.ERROR
     LOG_FILE = f"{LOG_DIR}/erro.log"
     MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
-    LOG_PATTERN = "logs/erro*.log*"
+    LOG_PATTERN = f"{LOG_DIR}/erro*.log*"
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     
     _instance = None
@@ -72,7 +71,7 @@ class LoggerManager:
                 self._logger = logger
                 
             except Exception as error:
-                print(f"初始化日志记录器失败: {error}")
+                logging.error(f"初始化日志记录器失败: {error}")
                 logging.basicConfig(level=self.LOG_LEVEL, format=self.LOG_FORMAT)
                 self._logger = logging.getLogger('autoblocker')
             
