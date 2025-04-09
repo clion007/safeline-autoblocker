@@ -40,7 +40,7 @@ class SafeLineAPI:
         self.host = host
         self.port = port
         self.token = token
-        self.logger = logger_instance or get_logger_manager().get_logger()
+        self.logger = logger_instance or LoggerManager.get_instance().get_logger()
         
         # 设置默认参数
         self.cache_expiry = kwargs.get('cache_expiry', 3600)  # 1小时

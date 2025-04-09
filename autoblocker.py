@@ -37,9 +37,10 @@ LOG_CLEAN_INTERVAL = 86400   # 日志清理间隔，1天
 
 # 添加辅助函数来处理日志记录器和日志目录
 def get_logger_and_dir(logger_instance=None, log_directory=None):
-    """获取日志记录器和日志目录"""    
-    logger_manager_instance = get_logger_manager()
-    return (logger_instance or logger_manager_instance.get_logger()), (log_directory or logger_manager_instance.get_log_dir())
+    """获取日志记录器和日志目录"""  
+    logger_manager_instance = LoggerManager.get_instance()
+    return (logger_instance or logger_manager_instance.get_logger()), 
+    (log_directory or logger_manager_instance.LOG_DIR)
 
 def perform_log_maintenance(current_time, last_times, config_values, api, logger_instance=None, log_directory=None):
     """集中处理日志维护任务"""
@@ -189,7 +190,7 @@ def main():
     logger = logger_manager_instance.get_logger()
     
     # 创建配置管理器实例
-    config_manager = ConfigManager(logger)
+    config_manager = ConfigManager.get_instance()  # 使用单例模式
     
     # 解析命令行参数
     args = parse_arguments()
@@ -263,8 +264,8 @@ def main():
     
     return 0
 
-def handle_config_command(args, config_manager):
-    """处理配置相关命令"""
+def handle_config_command(args):
+    config_manager = ConfigManager.get_instance()  # 改为直接获取实例
     if args.command == 'token':
         # 修正：使用实例方法而不是类方法
         if config_manager.update_token(args.value):

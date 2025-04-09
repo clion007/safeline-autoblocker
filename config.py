@@ -5,8 +5,9 @@
 """
 
 import os
+import threading
 import configparser
-from logger import get_logger_manager
+from logger import LoggerManager
 
 class ConfigManager:
     """配置管理类"""
@@ -16,8 +17,6 @@ class ConfigManager:
     KEY_FILE = f"{CONFIG_DIR}/token.key"
     TOKEN_FILE = f"{CONFIG_DIR}/token.enc"
     CONFIG_FILE = f"{CONFIG_DIR}/setting.conf"
-    LOG_DIR = "logs"
-    LOG_FILE = "logs/autoblocker.log"
     
     # 定义默认配置常量
     DEFAULT_CONFIG = {
@@ -54,7 +53,7 @@ class ConfigManager:
         """获取指定类型的路径
         
         Args:
-            path_type: 路径类型，可选值: 'key_file', 'token_file', 'config_file', 'log_dir', 'log_file'
+            path_type: 路径类型，可选值: 'key_file', 'token_file', 'config_file'
             
         Returns:
             str: 对应类型的路径
@@ -62,19 +61,33 @@ class ConfigManager:
         path_mapping = {
             'key_file': cls.KEY_FILE,
             'token_file': cls.TOKEN_FILE,
-            'config_file': cls.CONFIG_FILE,
-            'log_dir': cls.LOG_DIR,
-            'log_file': cls.LOG_FILE
+            'config_file': cls.CONFIG_FILE
         }
         return path_mapping.get(path_type)
     
-    def __init__(self):
-        """初始化配置管理器"""
-        self.logger = get_logger_manager().get_logger()
-        self._config = None
-        # 初始化时自动加载配置
-        self.load()
+    _instance = None
+    _lock = threading.Lock()
     
+    def __init__(self):
+        """保护初始化方法，请使用 get_instance()"""
+        raise RuntimeError("请使用 get_instance() 方法获取实例")
+    
+    @classmethod
+    def get_instance(cls):
+        """获取配置管理器实例（线程安全）"""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = cls.__new__(cls)
+                    cls._instance._init_instance()
+        return cls._instance
+
+    def __init__(self):
+            """初始化配置管理器"""
+            self.logger = LoggerManager.get_instance().get_logger()
+            self._config = None
+            self.load()
+
     def _validate_and_repair_config(self, config):
         is_modified = False
         
