@@ -4,10 +4,6 @@
 """
 API交互模块
 """
-
-import os
-import sys
-import json
 import time
 import logging
 import requests
@@ -18,53 +14,41 @@ from requests.packages.urllib3.util.retry import Retry
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
-# 定义攻击类型常量映射
-ATTACK_TYPES = {
-    0: "SQL注入",
-    1: "XSS",
-    2: "CSRF",
-    3: "SSRF",
-    4: "拒绝服务",
-    5: "后门",
-    6: "反序列化",
-    7: "代码执行",
-    8: "代码注入",
-    9: "命令注入",
-    10: "文件上传",
-    11: "文件包含",
-    21: "扫描器",
-    29: "模板注入"
-}
-
-# 全局常量定义
-# 缓存过期时间（秒）
-CACHE_EXPIRY = 3600  # 1小时
-# IP批处理阈值
-IP_BATCH_SIZE = 20
-# IP批处理时间间隔（秒）
-IP_BATCH_INTERVAL = 10
-# IP组缓存有效期（秒）
-IP_GROUP_CACHE_TTL = 300  # 5分钟
-
-# 全局变量，用于存储攻击类型名称
-attack_type_names = {}
-# IP缓存，避免重复添加
-ip_cache = {}
-
-# 在文件顶部导入日志管理器
-from logger import logger_manager
-
 class SafeLineAPI:
     """雷池WAF API交互类"""
     
-    def __init__(self, host, port, token, logger_instance=None):
+    # 定义攻击类型常量映射
+    ATTACK_TYPES = {
+        0: "SQL注入",
+        1: "XSS",
+        2: "CSRF",
+        3: "SSRF",
+        4: "拒绝服务",
+        5: "后门",
+        6: "反序列化",
+        7: "代码执行",
+        8: "代码注入",
+        9: "命令注入",
+        10: "文件上传",
+        11: "文件包含",
+        21: "扫描器",
+        29: "模板注入"
+    }
+    
+    def __init__(self, host, port, token, logger_instance=None, **kwargs):
         """初始化API客户端"""
         self.host = host
         self.port = port
         self.token = token
-        self.session = requests.Session()
-        self.logger = logger_instance or logger_manager.get_logger('safeline-autoblocker')
+        self.logger = logger_instance or get_logger_manager().get_logger()
         
+        # 设置默认参数
+        self.cache_expiry = kwargs.get('cache_expiry', 3600)  # 1小时
+        self.ip_batch_size = kwargs.get('ip_batch_size', 20)
+        self.ip_batch_interval = kwargs.get('ip_batch_interval', 10)
+        self.ip_groups_cache_ttl = kwargs.get('ip_groups_cache_ttl', 300)  # 5分钟
+        
+        self.session = requests.Session()
         self.headers = {
             'X-SLCE-API-TOKEN': self.token,
             'Content-Type': 'application/json'
@@ -297,115 +281,66 @@ class SafeLineAPI:
         if expired_keys:
             self.logger.debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
 
-# 攻击类型名称缓存
-attack_type_names = {}
+    def get_attack_type_name(self, attack_type_id):
+        """获取攻击类型名称"""
+        attack_type_id = str(attack_type_id)
+        return self.ATTACK_TYPES.get(int(attack_type_id), f"未知类型({attack_type_id})")
+    
+    def process_log_entry(self, log_entry, low_risk_ip_group, high_risk_ip_group, type_group_mapping, attack_types_filter):
+        """处理单个日志条目"""
+        ip = log_entry.get('src_ip')
+        attack_type = log_entry.get('attack_type')
+        url = log_entry.get('website', '')
+        
+        if not ip or attack_type is None or attack_type == -3:
+            return False
+        
+        # 处理攻击类型过滤
+        if attack_types_filter and str(attack_type) not in attack_types_filter:
+            attack_type_name = self.get_attack_type_name(attack_type)
+            reason = f"未列举攻击类型: {attack_type_name} - {url}"
+            return self.add_ip_to_group(ip, reason, low_risk_ip_group)
+        
+        # 确定目标IP组
+        attack_type_name = self.get_attack_type_name(attack_type)
+        ip_group = type_group_mapping.get(str(attack_type), low_risk_ip_group)
+        reason = f"{attack_type_name} - {url}"
+        
+        return self.add_ip_to_group(ip, reason, ip_group)
 
-# 初始化攻击类型名称缓存
-for attack_id, attack_name in ATTACK_TYPES.items():
-    attack_type_names[str(attack_id)] = attack_name
-
-# 移除 update_attack_type_names 函数
-
-# 修改 get_attack_type_name 函数，简化实现
-def get_attack_type_name(attack_type_id, attack_type_names_dict=None):
-    """获取攻击类型名称，使用缓存提高性能"""
-    # 将 attack_type_id 转换为字符串
-    attack_type_id = str(attack_type_id)
-    
-    # 如果没有提供字典，使用全局变量
-    if attack_type_names_dict is None:
-        global attack_type_names
-        attack_type_names_dict = attack_type_names
-    
-    # 如果缓存中有，直接返回
-    if attack_type_id in attack_type_names_dict:
-        return attack_type_names_dict[attack_type_id]
-    
-    # 否则返回未知类型
-    return f"未知类型({attack_type_id})"
-
-# 修改 process_log_entry 函数
-def process_log_entry(log_entry, api, low_risk_ip_group, high_risk_ip_group, type_group_mapping, attack_types_filter, logger_instance=None, attack_type_names_dict=None):
-    """处理单个日志条目"""
-    # 使用日志管理器获取日志记录器
-    logger_to_use = logger_instance or logger_manager.get_logger()
-    
-    # 根据实际API返回的字段名获取IP和攻击类型
-    ip = log_entry.get('src_ip')  # 使用src_ip而不是client_ip
-    attack_type = log_entry.get('attack_type')
-    url = log_entry.get('website', '')  # 使用website而不是url
-    
-    if not ip or attack_type is None:
-        return False
-    
-    # 排除黑名单攻击类型(ID为-3)
-    if attack_type == -3:
-        return False
-    
-    # 如果设置了攻击类型过滤，检查是否在过滤列表中
-    if attack_types_filter and str(attack_type) not in attack_types_filter:
-        # 对于不在过滤列表中的攻击类型，将其IP添加到低危IP组
-        attack_type_name = get_attack_type_name(attack_type, attack_type_names_dict)
-        reason = f"未列举攻击类型: {attack_type_name} - {url}"
-        return api.add_ip_to_group(ip, reason, low_risk_ip_group)
-    
-    # 获取攻击类型名称
-    attack_type_name = get_attack_type_name(attack_type, attack_type_names_dict)
-    
-    # 确定IP组
-    ip_group = low_risk_ip_group  # 默认使用低危IP组
-    if str(attack_type) in type_group_mapping:
-        ip_group = type_group_mapping[str(attack_type)]
-    
-    # 构建原因
-    reason = f"{attack_type_name} - {url}"
-    
-    # 添加IP到IP组
-    return api.add_ip_to_group(ip, reason, ip_group)
+from config import get_path
 
 def create_api_instance(config_values, logger_instance=None):
     """创建API实例"""
     # 使用日志管理器获取日志记录器
-    logger_to_use = logger_instance or logger_manager.get_logger()
+    logger_to_use = logger_instance or get_logger_manager().get_logger()
     
-    # 获取配置值
-    host = config_values.get('host', 'localhost')
-    port = config_values.get('port', 9443)
-    token_encrypted = config_values.get('token_encrypted', '')
-    
-    # 如果令牌是加密的，尝试解密
-    if token_encrypted.startswith('gAAAAAB'):
-        try:
-            from config import get_key_file, decrypt_token
-            key_file_path = get_key_file()
-            with open(key_file_path, 'r') as key_file:
-                key = key_file.read().strip()
-            token = decrypt_token(token_encrypted, key)
-        except Exception as error:
-            logger_to_use.error(f"解密令牌失败: {str(error)}")
-            return None
-    
-    # 创建 API 实例
     try:
+        # 获取配置值
+        host = config_values.get('host', 'localhost')
+        port = config_values.get('port', 9443)
+        
+        # 使用 ConfigManager 获取解密后的令牌
+        token = ConfigManager.get_token(config_values, logger_instance)
+        if not token:
+            logger_to_use.error("无法获取有效的API令牌")
+            return None
+        
+        # 创建API实例
         api = SafeLineAPI(
             host=host,
             port=port,
             token=token,
-            logger_instance=logger_to_use
+            logger_instance=logger_to_use,
+            ip_batch_size=config_values.get('ip_batch_size'),
+            ip_batch_interval=config_values.get('ip_batch_interval'),
+            cache_expiry=config_values.get('cache_expiry'),
+            ip_groups_cache_ttl=config_values.get('ip_groups_cache_ttl')
         )
-        
-        # 设置自定义参数
-        if 'ip_batch_size' in config_values:
-            api.ip_batch_size = config_values['ip_batch_size']
-        if 'ip_batch_interval' in config_values:
-            api.ip_batch_interval = config_values['ip_batch_interval']
-        if 'cache_expiry' in config_values:
-            api.cache_expiry = config_values['cache_expiry']
-        if 'ip_groups_cache_ttl' in config_values:
-            api.ip_groups_cache_ttl = config_values['ip_groups_cache_ttl']
         
         logger_to_use.info(f"成功创建API实例，连接到 {host}:{port}")
         return api
+        
     except Exception as error:
         logger_to_use.error(f"创建API实例失败: {str(error)}")
         return None

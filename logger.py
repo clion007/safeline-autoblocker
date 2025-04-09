@@ -6,39 +6,19 @@
 """
 
 import os
-import sys
 import logging
 import glob
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
-# 导入路径常量
-from config import PATHS, LOG_DIR, LOG_FILE
-
-# 添加常量定义
-DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DEFAULT_LOG_LEVEL = logging.INFO
-MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
-BACKUP_COUNT = 5
+from config import ConfigManager
 
 class LoggerManager:
-    """日志管理类，提供统一的日志获取和管理方法"""
-    
-    _instance = None
-    
-    @classmethod
-    def get_instance(cls, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
-        """获取单例实例"""
-        if cls._instance is None:
-            cls._instance = cls(log_dir, log_level, use_rotating_handler, log_format)
-        return cls._instance
-    
     def __init__(self, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
         """初始化日志管理器"""
-        # 直接使用LOG_DIR和LOG_FILE，不再调用get_effective_*函数
-        self.log_dir = log_dir or LOG_DIR
-        self.log_file = os.path.join(self.log_dir, os.path.basename(LOG_FILE))
-        
+        config_manager = ConfigManager()
+        self.log_dir = log_dir or config_manager.get_path('log_dir')
+        self.log_file = os.path.join(self.log_dir, os.path.basename(config_manager.get_path('log_file')))
         self.log_level = log_level or DEFAULT_LOG_LEVEL
         self.log_format = log_format or DEFAULT_LOG_FORMAT
         self.use_rotating_handler = use_rotating_handler
@@ -102,7 +82,6 @@ class LoggerManager:
     def clean_old_logs(self, retention_days, log_directory=None):
         """清理旧日志文件"""
         try:
-            # 使用传入的日志目录或默认目录
             log_dir = log_directory or self.log_dir
             
             # 计算截止日期
@@ -128,10 +107,16 @@ class LoggerManager:
                 self.logger.info(f"已清理 {deleted_count} 个过期日志文件")
         except Exception as error:
             self.logger.error(f"清理旧日志文件时出错: {str(error)}")
+# 全局变量用于存储单例实例
+_logger_manager_instance = None
 
-# 创建全局日志管理器实例
-logger_manager = LoggerManager.get_instance()
+def get_logger_manager():
+    """获取日志管理器实例（惰性初始化）"""
+    global _logger_manager_instance
+    if _logger_manager_instance is None:
+        _logger_manager_instance = LoggerManager()
+    return _logger_manager_instance
 
 def clean_old_logs(retention_days, log_directory=None):
     """清理旧日志文件（兼容旧代码）"""
-    logger_manager.clean_old_logs(retention_days, log_directory)
+    get_logger_manager().clean_old_logs(retention_days, log_directory)

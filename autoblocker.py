@@ -21,10 +21,11 @@ from datetime import datetime, timedelta
 # 导入自定义模块
 from config import (
     parse_config, validate_config, get_config_values, 
-    CONFIG_FILE, LOG_DIR, LOG_FILE, VERSION
+    CONFIG_FILE, VERSION
 )
 from api import SafeLineAPI, process_log_entry, get_attack_type_name, create_api_instance
-from logger import clean_old_logs, logger_manager
+from logger import clean_old_logs, get_logger_manager
+from config import ConfigManager
 
 # 设置日志 - 使用logger_manager统一管理
 logger = logger_manager.get_logger()
@@ -37,8 +38,8 @@ LOG_CLEAN_INTERVAL = 86400   # 日志清理间隔，1天
 # 添加辅助函数来处理日志记录器和日志目录
 def get_logger_and_dir(logger_instance=None, log_directory=None):
     """获取日志记录器和日志目录"""    
-    # 返回日志记录器和日志目录
-    return (logger_instance or logger_manager.get_logger()), (log_directory or logger_manager.get_log_dir())
+    logger_manager_instance = get_logger_manager()
+    return (logger_instance or logger_manager_instance.get_logger()), (log_directory or logger_manager_instance.get_log_dir())
 
 def perform_log_maintenance(current_time, last_times, config_values, api, logger_instance=None, log_directory=None):
     """集中处理日志维护任务"""
@@ -63,8 +64,8 @@ def perform_log_maintenance(current_time, last_times, config_values, api, logger
 
 def process_attack_logs(api, config_values, logger_instance=None):
     """处理攻击日志的通用函数"""
-    # 获取日志记录器
-    logger_to_use = logger_instance or logger_manager.get_logger()
+    # 修改日志记录器获取方式
+    logger_to_use = logger_instance or get_logger_manager().get_logger()
     
     # 获取配置值
     high_risk_ip_group = config_values.get('high_risk_ip_group')
@@ -96,11 +97,13 @@ def process_attack_logs(api, config_values, logger_instance=None):
 
 def api_monitor(config, logger_instance=None, log_directory=None, existing_api=None):
     """API监控函数"""
-    # 使用日志管理器获取日志记录器和日志目录
-    logger_to_use, log_dir_to_use = get_logger_and_dir(logger_instance, log_directory)
+    # 使用配置管理器
+    config_manager = ConfigManager(logger_instance)
+    if not config_manager.load_config():
+        return False
     
     # 获取配置值
-    config_values = get_config_values(config)
+    config_values = config_manager.config_values
     
     # 初始化API实例
     api = existing_api or create_api_instance(config_values, logger_to_use)
@@ -182,30 +185,26 @@ def parse_arguments():
 
 def main():
     """主函数"""
+    logger_manager_instance = get_logger_manager()
+    logger = logger_manager_instance.get_logger()
+    
+    # 创建配置管理器实例
+    config_manager = ConfigManager(logger)
+    
     # 解析命令行参数
     args = parse_arguments()
     
     # 如果是配置命令，执行配置操作并退出
     if args.command:
-        return handle_config_command(args)
+        return handle_config_command(args, config_manager)
     
-    # 正常运行程序的逻辑
-    # 使用全局logger，避免重复初始化
-    global logger, log_dir
-    
-    # 直接使用CONFIG_FILE而不是get_effective_config_file()
-    config = parse_config(CONFIG_FILE)
-    if not config:
+    # 加载配置
+    if not config_manager.load_config():
         logger.error("无法加载配置，程序退出")
         return 1
     
-    # 验证配置
-    if not validate_config(config, logger):
-        logger.error("配置验证失败，程序退出")
-        return 1
-    
-    # 获取配置值（只解析一次配置）
-    config_values = get_config_values(config)
+    # 使用配置值
+    config_values = config_manager.config_values
     
     # 清理日志
     if args.clean_logs:
@@ -216,8 +215,9 @@ def main():
     
     # 创建API实例（只在需要时创建一次）
     api = None
+    # 修改API实例创建
     if not args.version and not args.clean_logs:
-        api = create_api_instance(config_values, logger)
+        api = create_api_instance(config_values, logger)  # 使用局部logger变量
         if not api:
             logger.error("无法创建API实例，操作取消")
             # 如果无法创建API实例，直接退出，不仅限于特定命令行参数
@@ -263,25 +263,26 @@ def main():
     
     return 0
 
-def handle_config_command(args):
+def handle_config_command(args, config_manager):
     """处理配置相关命令"""
-    from config import parse_config, update_config, create_default_config, reload_config
-    
-    # 直接使用CONFIG_FILE而不是get_effective_config_file()
-    config_file = CONFIG_FILE
+    if args.command == 'token':
+        # 更新令牌
+        if ConfigManager.update_token(args.value):
+            print("令牌更新成功")
+            return 0
+        print("令牌更新失败")
+        return 1
     
     # 处理查看配置命令
     if args.command == 'view':
-        # 查看配置
-        config = parse_config(config_file)
-        if not config:
-            print(f"错误: 无法读取配置文件 {config_file}")
+        if not config_manager.load_config():
+            print(f"错误: 无法读取配置文件")
             return 1
-        
+            
         if args.section and args.option:
-            # 查看特定选项
-            if args.section in config and args.option in config[args.section]:
-                print(f"{args.section}.{args.option} = {config[args.section][args.option]}")
+            value = config_manager.get_value(args.section, args.option)
+            if value is not None:
+                print(f"{args.section}.{args.option} = {value}")
             else:
                 print(f"错误: 配置项 {args.section}.{args.option} 不存在")
                 return 1
@@ -307,39 +308,23 @@ def handle_config_command(args):
             for option, value in config.defaults().items():
                 print(f"{option} = {value}")
     
-    # 处理设置配置命令
     elif args.command == 'set':
         # 设置配置
-        update_result = update_config({args.section: {args.option: args.value}}, config_file)
-        if update_result:
+        if config_manager.update_config({args.section: {args.option: args.value}}):
             print(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
         else:
             print(f"错误: 设置 {args.section}.{args.option} 失败")
             return 1
     
-    # 处理重置配置命令
     elif args.command == 'reset':
-        # 重置配置
         if not args.confirm:
             print("警告: 此操作将重置所有配置为默认值。如果确认，请添加 --confirm 参数。")
             return 1
         
-        reset_result = create_default_config(config_file)
-        if reset_result:
+        if config_manager.create_default_config():
             print("成功: 配置已重置为默认值")
         else:
             print("错误: 重置配置失败")
-            return 1
-    
-    # 处理重新加载配置命令
-    elif args.command == 'reload':
-        print(f"正在重新加载配置文件: {config_file}")
-        new_config = reload_config(config_file)
-        if new_config:
-            print("配置文件已成功重新加载")
-            return 0
-        else:
-            print("重新加载配置文件失败，请检查日志获取详细信息")
             return 1
     
     return 0
