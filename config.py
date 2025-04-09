@@ -164,29 +164,21 @@ class ConfigManager:
             raise
 
     def get_token(self):
-        """获取解密后的令牌
-        
-        Returns:
-            str: 解密后的令牌
-        """
         try:
-            # 从令牌文件读取加密的令牌
-            token_file_path = self.get_path('token_file')
-            if not os.path.exists(token_file_path):
-                self.logger.error(f"令牌文件不存在: {token_file_path}")
+            # 直接使用类常量
+            if not os.path.exists(self.TOKEN_FILE):
+                self.logger.error(f"令牌文件不存在: {self.TOKEN_FILE}")
                 return None
             
-            with open(token_file_path, 'r') as token_file:
+            with open(self.TOKEN_FILE, 'r') as token_file:
                 encrypted_token = token_file.read().strip()
             
             # 从密钥文件读取密钥
-            # 修正：使用 self 而不是 cls
-            key_file_path = self.get_path('key_file')
-            if not os.path.exists(key_file_path):
-                self.logger.error(f"密钥文件不存在: {key_file_path}")
+            if not os.path.exists(self.KEY_FILE):
+                self.logger.error(f"密钥文件不存在: {self.KEY_FILE}")
                 return None
             
-            with open(key_file_path, 'r') as key_file:
+            with open(self.KEY_FILE, 'r') as key_file:
                 key = key_file.read().strip()
             
             # 解密令牌
@@ -199,19 +191,9 @@ class ConfigManager:
             return None
 
     def update_token(self, new_token):
-        """更新并加密保存令牌
-        
-        Args:
-            new_token: 新的令牌字符串
-            
-        Returns:
-            bool: 更新成功返回True，失败返回False
-        """
         try:
-            # 读取密钥
-            # 修正：使用 self 而不是 cls
-            key_file_path = self.get_path('key_file')
-            with open(key_file_path, 'r') as key_file:
+            # 直接使用类常量
+            with open(self.KEY_FILE, 'r') as key_file:
                 key = key_file.read().strip()
             
             # 加密新令牌
@@ -220,8 +202,7 @@ class ConfigManager:
             encrypted_token = fernet.encrypt(new_token.encode()).decode()
             
             # 保存加密后的令牌
-            token_file_path = cls.get_path('token_file')
-            with open(token_file_path, 'w') as token_file:
+            with open(self.TOKEN_FILE, 'w') as token_file:
                 token_file.write(encrypted_token)
             
             self.logger.info("令牌已更新并加密保存")
