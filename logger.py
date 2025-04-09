@@ -16,9 +16,9 @@ from config import ConfigManager
 class LoggerManager:
     def __init__(self, log_dir=None, log_level=None, use_rotating_handler=True, log_format=None):
         """初始化日志管理器"""
-        config_manager = ConfigManager()
-        self.log_dir = log_dir or config_manager.get_path('log_dir')
-        self.log_file = os.path.join(self.log_dir, os.path.basename(config_manager.get_path('log_file')))
+        # 修正：避免循环依赖，改用直接路径
+        self.log_dir = log_dir or "logs"
+        self.log_file = os.path.join(self.log_dir, "autoblocker.log")
         self.log_level = log_level or DEFAULT_LOG_LEVEL
         self.log_format = log_format or DEFAULT_LOG_FORMAT
         self.use_rotating_handler = use_rotating_handler

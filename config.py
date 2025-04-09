@@ -180,11 +180,12 @@ class ConfigManager:
                 encrypted_token = token_file.read().strip()
             
             # 从密钥文件读取密钥
-            key_file_path = cls.get_path('key_file')
+            # 修正：使用 self 而不是 cls
+            key_file_path = self.get_path('key_file')
             if not os.path.exists(key_file_path):
-                logger.error(f"密钥文件不存在: {key_file_path}")
+                self.logger.error(f"密钥文件不存在: {key_file_path}")
                 return None
-                
+            
             with open(key_file_path, 'r') as key_file:
                 key = key_file.read().strip()
             
@@ -208,7 +209,8 @@ class ConfigManager:
         """
         try:
             # 读取密钥
-            key_file_path = cls.get_path('key_file')
+            # 修正：使用 self 而不是 cls
+            key_file_path = self.get_path('key_file')
             with open(key_file_path, 'r') as key_file:
                 key = key_file.read().strip()
             

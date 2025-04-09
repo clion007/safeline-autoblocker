@@ -266,16 +266,16 @@ def main():
 def handle_config_command(args, config_manager):
     """处理配置相关命令"""
     if args.command == 'token':
-        # 更新令牌
-        if ConfigManager.update_token(args.value):
+        # 修正：使用实例方法而不是类方法
+        if config_manager.update_token(args.value):
             print("令牌更新成功")
             return 0
         print("令牌更新失败")
         return 1
     
-    # 处理查看配置命令
+    # 修正：移除不存在的 load_config 调用
     if args.command == 'view':
-        if not config_manager.load_config():
+        if not config_manager._config:
             print(f"错误: 无法读取配置文件")
             return 1
             
@@ -309,8 +309,8 @@ def handle_config_command(args, config_manager):
                 print(f"{option} = {value}")
     
     elif args.command == 'set':
-        # 设置配置
-        if config_manager.update_config({args.section: {args.option: args.value}}):
+        # 修正：使用新的 set_value 方法
+        if config_manager.set_value(args.section, args.option, args.value):
             print(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
         else:
             print(f"错误: 设置 {args.section}.{args.option} 失败")
