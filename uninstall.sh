@@ -21,7 +21,6 @@ echo "
 # 定义路径
 CONFIG_DIR="/etc/safeline"
 INSTALL_DIR="/opt/safeline/scripts"
-INSTALL_LOG_DIR="/var/log/safeline"
 SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
 
 # 检查是否为root用户
@@ -114,15 +113,6 @@ remove_scripts() {
     done
 }
 
-# 删除日志文件
-remove_logs() {
-    if [ -d "$INSTALL_LOG_DIR" ]; then
-        rm -rf "$INSTALL_LOG_DIR" && echo "删除日志目录: $INSTALL_LOG_DIR" || echo "删除日志目录失败"
-    else
-        echo "日志目录不存在: $INSTALL_LOG_DIR"
-    fi
-}
-
 # 执行卸载步骤
 stop_service
 service_removed=true
@@ -131,8 +121,6 @@ config_removed=true
 remove_config || config_removed=false
 script_removed=true
 remove_scripts || script_removed=false
-logs_removed=true
-remove_logs || logs_removed=false
 dirs_removed=true
 remove_directories || dirs_removed=false
 
@@ -141,9 +129,8 @@ echo -e "\n卸载结果:"
 echo "服务文件: $([ "$service_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "配置文件: $([ "$config_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "脚本文件: $([ "$script_removed" = true ] && echo '已删除' || echo '删除失败')"
-echo "日志文件: $([ "$logs_removed" = true ] && echo '已删除' || echo '删除失败')"
 
-if [ "$service_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ] && [ "$logs_removed" = true ]; then
+if [ "$service_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ]; then
     echo -e "\n✓ 卸载完成！所有组件已成功删除。"
 else
     echo -e "\n⚠ 卸载完成，但部分组件删除失败，请检查上述信息。"

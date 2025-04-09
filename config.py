@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 配置管理模块
@@ -10,10 +9,12 @@ import sys
 import logging
 import configparser
 
-# 定义路径常量 - 移除安装环境相关的路径
+# 定义路径常量
+CONFIG_DIR = "/etc/safeline"
+KEY_FILE = "$CONFIG_DIR/token.key"
+TOKEN_FILE = "$CONFIG_DIR/token.enc"
+CONFIG_FILE = "$CONFIG_DIR/setting.conf"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(SCRIPT_DIR, 'setting.conf')
-KEY_FILE = os.path.join(SCRIPT_DIR, 'token.key')
 LOG_DIR = os.path.join(SCRIPT_DIR, 'logs')
 LOG_FILE = os.path.join(LOG_DIR, 'autoblocker.log')
 

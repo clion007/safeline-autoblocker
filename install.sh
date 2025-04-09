@@ -22,7 +22,6 @@ CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
 MAIN_SCRIPT="autoblocker.py"
 UNINSTALL_SCRIPT="uninstall.sh"
 INSTALL_DIR="/opt/safeline/scripts"
-INSTALL_LOG_DIR="/var/log/safeline"
 SERVICE_FILE="/etc/systemd/system/safeline-autoblocker.service"
 
 # 定义下载源
@@ -164,7 +163,7 @@ check_dependencies() {
 create_directories() {
     print_step 1 6 "创建必要目录"
     
-    local directories=("$INSTALL_DIR" "$CONFIG_DIR" "$INSTALL_LOG_DIR")
+    local directories=("$INSTALL_DIR" "$CONFIG_DIR")
     
     for dir in "${directories[@]}"; do
         mkdir -p "$dir"
@@ -420,9 +419,6 @@ cleanup_files() {
     # 尝试删除父目录（如果为空）
     PARENT_DIR=$(dirname "$INSTALL_DIR")
     [ -d "$PARENT_DIR" ] && [ -z "$(ls -A "$PARENT_DIR")" ] && rmdir "$PARENT_DIR"
-    
-    # 删除安装日志
-    rm -rf "$INSTALL_LOG_DIR"
     
     echo -e "${YELLOW}清理完成，安装已回滚${NC}"
 }
