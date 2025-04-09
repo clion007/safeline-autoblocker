@@ -101,10 +101,10 @@ remove_config() {
 # 删除脚本文件
 remove_scripts() {
     script_files=(
-        "$INSTALL_DIR/autoblocker.py"
         "$INSTALL_DIR/api.py"
         "$INSTALL_DIR/config.py"
         "$INSTALL_DIR/logger.py"
+        "$INSTALL_DIR/autoblocker.py"
     )
     
     for file in "${script_files[@]}"; do
@@ -149,6 +149,20 @@ else
     echo -e "\n⚠ 卸载完成，但部分组件删除失败，请检查上述信息。"
 fi
 
-# 最后删除自身及相关目录
-echo "卸载脚本将自动删除自身及相关目录..."
-rm -rf "../$INSTALL_DIR"
+# 获取父目录路径
+PARENT_DIR=$(dirname "$INSTALL_DIR")
+
+# 删除安装目录及卸载脚本自身
+if [ -d "$INSTALL_DIR" ]; then
+    echo "删除安装目录: $INSTALL_DIR"
+    # 使用后台任务删除，即使脚本被删除也能完成操作
+    (sleep 1; rm -rf "$INSTALL_DIR"; 
+     # 如果父目录为空，也一并删除
+     if [ -d "$PARENT_DIR" ] && [ -z "$(ls -A "$PARENT_DIR")" ]; then
+         echo "删除空父目录: $PARENT_DIR"
+         rmdir "$PARENT_DIR"
+     fi) &
+    
+    echo "卸载完成，脚本将自动退出..."
+    exit 0
+fi

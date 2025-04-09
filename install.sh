@@ -167,7 +167,7 @@ create_directories() {
     local directories=("$INSTALL_DIR" "$CONFIG_DIR" "$INSTALL_LOG_DIR")
     
     for dir in "${directories[@]}"; do
-        mkdir -p "$dir" 2>/dev/null
+        mkdir -p "$dir"
         if [ $? -eq 0 ]; then
             chmod 755 "$dir"
             echo -e "${GREEN}创建目录: $dir (权限:755)${NC}"
@@ -415,10 +415,14 @@ cleanup_files() {
     [ -d "$CONFIG_DIR" ] && rm -rf "$CONFIG_DIR"
     
     # 删除脚本文件
-    rm -rf "../$INSTALL_DIR" 2>/dev/null
+    [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR"
+    
+    # 尝试删除父目录（如果为空）
+    PARENT_DIR=$(dirname "$INSTALL_DIR")
+    [ -d "$PARENT_DIR" ] && [ -z "$(ls -A "$PARENT_DIR")" ] && rmdir "$PARENT_DIR"
     
     # 删除安装日志
-    rm -rf "$INSTALL_LOG_DIR" 2>/dev/null
+    rm -rf "$INSTALL_LOG_DIR"
     
     echo -e "${YELLOW}清理完成，安装已回滚${NC}"
 }
@@ -481,6 +485,10 @@ main() {
     配置文件位置: $CONFIG_FILE
     卸载脚本位置: $INSTALL_DIR/$UNINSTALL_SCRIPT
     "
+    
+    # 删除安装脚本自身
+    echo -e "${BLUE}安装完成，将自动删除安装脚本...${NC}"
+    (sleep 1; rm -f "$0") &
 }
 
 # 执行主函数
