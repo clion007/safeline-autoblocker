@@ -3,7 +3,7 @@
 # 作者: Clion Nieh
 # 日期: 2025.4.6
 
-[DEFAULT]
+[GENERAL]
 # 雷池API主机地址
 SAFELINE_HOST = localhost
 
