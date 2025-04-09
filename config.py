@@ -41,25 +41,119 @@ class ConfigManager:
     def __init__(self, logger_instance=None):
         """初始化配置管理器"""
         self.logger = logger_instance or get_logger_manager().get_logger()
-        self.config = None
-        self.config_values = None
+        self._config = None
+        self._config_values = None
+        # 初始化时自动加载配置
+        self.load()
     
-    def load_config(self):
+    def _validate_and_repair_config(self, config):
+        """验证配置完整性并修复"""
+        is_modified = False
+        
+        # 检查并补充缺失的配置段
+        required_sections = {'TYPE_GROUP_MAPPING'}
+        for section in required_sections:
+            if section not in config.sections():
+                config.add_section(section)
+                is_modified = True
+        
+        # 检查并补充默认配置项
+        default_values = {
+            'SAFELINE_HOST': 'localhost',
+            'SAFELINE_PORT': '9443',
+            'HIGH_RISK_IP_GROUP': '黑名单',
+            'LOW_RISK_IP_GROUP': '人机验证',
+            'QUERY_INTERVAL': '60',
+            'MAX_LOGS_PER_QUERY': '100',
+            'LOG_RETENTION_DAYS': '30',
+            'ATTACK_TYPES_FILTER': ''
+        }
+        for option, value in default_values.items():
+            if option not in config.defaults():
+                config.set('DEFAULT', option, str(value))
+                is_modified = True
+        
+        # 检查并补充类型映射配置
+        default_mappings = {
+            '0': '黑名单',   # SQL注入
+            '5': '黑名单',   # 后门
+            '7': '黑名单',   # 代码执行
+            '8': '黑名单',   # 代码注入
+            '9': '黑名单',   # 命令注入
+            '11': '黑名单',  # 文件包含
+            '29': '黑名单',  # 模板注入
+            '1': '人机验证', # XSS
+            '2': '人机验证', # CSRF
+            '3': '人机验证', # SSRF
+            '4': '人机验证', # 拒绝服务
+            '6': '人机验证', # 反序列化
+            '10': '人机验证', # 文件上传
+            '21': '人机验证'  # 扫描器
+        }
+        for type_id, group in default_mappings.items():
+            if not config.has_option('TYPE_GROUP_MAPPING', type_id):
+                config.set('TYPE_GROUP_MAPPING', type_id, group)
+                is_modified = True
+        
+        # 如果配置有修改，保存更新
+        if is_modified:
+            self.logger.warning("配置文件不完整，已自动补充缺失配置")
+            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                config.write(f)
+        
+        return True
+    
+    def load(self):
         """加载配置文件"""
         config = configparser.ConfigParser()
         
-        if not os.path.exists(self.CONFIG_FILE):
-            self.logger.error(f"配置文件不存在: {self.CONFIG_FILE}")
-            return False
-        
         try:
+            if not os.path.exists(self.CONFIG_FILE):
+                self.logger.warning(f"配置文件不存在，创建默认配置: {self.CONFIG_FILE}")
+                if not self.create_default_config():
+                    return False
+        
             config.read(self.CONFIG_FILE)
-            self.config = config
-            self.config_values = self._get_all_values()
+            # 验证并修复配置
+            self._validate_and_repair_config(config)
+            
+            self._config = config
+            self._config_values = self._get_all_values()
             return True
+            
         except Exception as error:
             self.logger.error(f"读取配置文件时出错: {str(error)}")
-            return False
+            self.logger.warning("尝试重新创建默认配置")
+            if not self.create_default_config():
+                return False
+            return self.load()
+    
+    def get_config(self, key, default=None):
+        """获取配置值
+        
+        Args:
+            key: 配置键名
+            default: 默认值
+            
+        Returns:
+            配置值
+        """
+        if not self._config_values:
+            return default
+        return self._config_values.get(key, default)
+    
+    def get_type_mapping(self, attack_type):
+        """获取攻击类型映射
+        
+        Args:
+            attack_type: 攻击类型ID
+            
+        Returns:
+            str: 对应的IP组名称
+        """
+        if not self._config_values or 'type_group_mapping' not in self._config_values:
+            return None
+        return self._config_values['type_group_mapping'].get(str(attack_type))
     
     def _get_all_values(self):
         """获取所有配置值"""
@@ -67,9 +161,29 @@ class ConfigManager:
             return None
             
         values = {}
+        
         # 获取默认配置项
         for option in CONFIG_SCHEMA['DEFAULT']:
-            values[option] = self.get_value('DEFAULT', option)
+            try:
+                # 获取配置项的验证规则
+                schema = CONFIG_SCHEMA['DEFAULT'].get(option, {'type': str, 'default': None})
+                value = self.config.defaults().get(option)
+                
+                # 处理默认值和类型转换
+                if value is None:
+                    if schema.get('required', False):
+                        self.logger.warning(f"必需的配置项 DEFAULT.{option} 不存在，使用默认值: {schema['default']}")
+                    values[option] = schema.get('default')
+                else:
+                    try:
+                        values[option] = schema['type'](value)
+                    except (ValueError, TypeError) as error:
+                        self.logger.error(f"配置项 DEFAULT.{option} 的值 {value} 类型转换失败: {error}")
+                        values[option] = schema.get('default')
+                        
+            except Exception as error:
+                self.logger.error(f"获取配置项 DEFAULT.{option} 时出错: {error}")
+                values[option] = None
         
         # 获取类型映射配置
         values['type_group_mapping'] = {}
@@ -122,7 +236,6 @@ class ConfigManager:
             'DEFAULT': {
                 'SAFELINE_HOST': 'localhost',
                 'SAFELINE_PORT': '9443',
-                'TOKEN': self.get_path('key_file'),  # 修改这里
                 'HIGH_RISK_IP_GROUP': '黑名单',
                 'LOW_RISK_IP_GROUP': '人机验证',
                 'QUERY_INTERVAL': '60',
