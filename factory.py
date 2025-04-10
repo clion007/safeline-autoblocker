@@ -17,9 +17,7 @@ class Factory:
         """获取配置管理器实例"""
         if cls._config_manager is None:
             from config import ConfigManager
-            # 初始化时不传入logger，避免循环依赖
-            cls._config_manager = ConfigManager(logger=None)
-            cls._config_manager.load()
+            cls._config_manager = ConfigManager()
         return cls._config_manager
     
     @classmethod
@@ -27,8 +25,7 @@ class Factory:
         """获取日志管理器实例"""
         if cls._logger_manager is None:
             from logger import LoggerManager
-            config = cls.get_config_manager()
-            cls._logger_manager = LoggerManager(config)
+            cls._logger_manager = LoggerManager()
         return cls._logger_manager
     
     @classmethod
@@ -41,9 +38,7 @@ class Factory:
         """获取API客户端实例"""
         if cls._api_client is None:
             from api import SafeLineAPI
-            config = cls.get_config_manager()
-            logger = cls.get_logger_manager().get_logger()
-            cls._api_client = SafeLineAPI(config, logger)
+            cls._api_client = SafeLineAPI(cls.get_config_manager(), cls.get_logger())
         return cls._api_client
     
     @classmethod

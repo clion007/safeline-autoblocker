@@ -156,22 +156,10 @@ def parse_arguments():
     
     return parser.parse_args()
 
-# 删除 init_container 函数，替换为 init_services 函数
-def init_services():
-    """初始化服务"""
-    # 确保配置管理器已加载
-    config_manager = Factory.get_config_manager()
-    
-    # 预初始化日志管理器和API客户端
-    logger = Factory.get_logger()
-    api = Factory.get_api_client()
-    
-    return config_manager, logger, api
-
 def main():
     """主函数"""
-    # 初始化服务
-    config_manager, logger, _ = init_services()
+    # 获取配置管理器
+    config_manager = Factory.get_config_manager()
     
     # 解析命令行参数
     args = parse_arguments()
@@ -181,7 +169,9 @@ def main():
         config_manager.set_value('LOGS', 'LEVEL', args.log_level)
         # 重置日志管理器，使其重新初始化
         Factory.reset()
-        logger = Factory.get_logger()
+    
+    # 获取日志记录器
+    logger = Factory.get_logger()
     
     # 如果是配置命令，执行配置操作并退出
     if args.command:
@@ -191,11 +181,11 @@ def main():
     if args.clean_logs:
         log_retention_days = config_manager.get_value('LOGS', 'RETENTION_DAYS')
         logger.info(f"手动清理日志，保留 {log_retention_days} 天")
-        # 修改：使用工厂模式获取日志管理器
         Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
         return 0
     
-    # 创建API实例
+    # 只在需要API实例时创建
+    api = None
     if not args.clean_logs:
         try:
             api = Factory.get_api_client()
@@ -243,7 +233,7 @@ def main():
         result = api_monitor(config_manager, logger, api)
         if not result:
             logger.error("API监控模式异常退出")
-            return 1  # 返回非零值表示异常退出
+            return 1
     else:
         logger.error("无法启动API监控模式：API实例未创建")
         return 1

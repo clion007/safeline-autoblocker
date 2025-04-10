@@ -15,35 +15,50 @@ class ConfigManager:
     KEY_FILE = f"{CONFIG_DIR}/token.key"
     TOKEN_FILE = f"{CONFIG_DIR}/token.enc"
     CONFIG_FILE = f"{CONFIG_DIR}/setting.conf"
+    LOG_CONFIG_FILE = f"{CONFIG_DIR}/log.yaml"
     
-    def __init__(self, logger=None):
+    # 定义默认配置
+    DEFAULT_CONFIG = {
+        'GENERAL': {
+            'SAFELINE_HOST': 'localhost',
+            'SAFELINE_PORT': '9443',
+            'API_PREFIX': '/api/open',
+            'HIGH_RISK_IP_GROUP': '黑名单',
+            'LOW_RISK_IP_GROUP': '人机验证',
+            'QUERY_INTERVAL': '60',
+            'MAX_LOGS_PER_QUERY': '100',
+            'ATTACK_TYPES_FILTER': ''
+        },
+        'MAINTENANCE': {
+            'CACHE_CLEAN_INTERVAL': '3600',
+            'LOG_CLEAN_INTERVAL': '86400'
+        },
+        'TYPE_GROUP_MAPPING': {
+            '0': '黑名单',   # SQL注入
+            '5': '黑名单',   # 后门
+            '7': '黑名单',   # 代码执行
+            '8': '黑名单',   # 代码注入
+            '9': '黑名单',   # 命令注入
+            '11': '黑名单',  # 文件包含
+            '29': '黑名单',  # 模板注入
+            '1': '人机验证', # XSS
+            '2': '人机验证', # CSRF
+            '3': '人机验证', # SSRF
+            '4': '人机验证', # 拒绝服务
+            '6': '人机验证', # 反序列化
+            '10': '人机验证', # 文件上传
+            '21': '人机验证'  # 扫描器
+        }
+    }
+    
+    def __init__(self):
         """初始化配置管理器"""
         if hasattr(self, '_initialized'):
             return
      
-        self._logger = logger
-        
-        # 加载配置
+        self._logger = None
         self._config = None
-        self.load()
-        
-        # 配置加载后，如果没有logger，尝试从工厂获取
-        if self._logger is None:
-            try:
-                from factory import Factory
-                self._logger = Factory.get_logger()
-            except (ImportError, AttributeError):
-                # 如果无法获取工厂日志，则不记录日志
-                pass
-                
         self._initialized = True
-    
-    # 删除 _create_default_logger 方法
-    
-    def log(self, level, message):
-        """记录日志"""
-        if self._logger:
-            getattr(self._logger, level.lower())(message)
     
     @classmethod
     def get_path(cls, path_type):
@@ -61,8 +76,6 @@ class ConfigManager:
             'config_file': cls.CONFIG_FILE
         }
         return path_mapping.get(path_type)
-    
-    # 移除重复的单例代码
     
     def is_loaded(self):
         """检查配置是否已加载"""
@@ -112,8 +125,16 @@ class ConfigManager:
             return True
             
         except Exception as error:
-            self.logger.error(f"读取配置文件时出错: {str(error)}")
+            logger = self.get_logger()
+            logger.error(f"读取配置文件时出错: {str(error)}")
             return False
+    
+    def get_logger(self):
+        """获取日志记录器"""
+        if self._logger is None:
+            from factory import Factory
+            self._logger = Factory.get_logger()
+        return self._logger
 
     def get_value(self, section, option):
         """获取配置项的值
@@ -128,12 +149,13 @@ class ConfigManager:
         try:
             value = self._config.get(section, option)
             
-            if option in {'SAFELINE_PORT', 'QUERY_INTERVAL', 'MAX_LOGS_PER_QUERY', 'LOG_RETENTION_DAYS'}:
+            if option in {'SAFELINE_PORT', 'QUERY_INTERVAL', 'MAX_LOGS_PER_QUERY'}:
                 return int(value)
             return value
                 
         except Exception as error:
-            self.logger.error(f"获取配置项 {section}.{option} 时出错: {error}")
+            logger = self.get_logger()
+            logger.error(f"获取配置项 {section}.{option} 时出错: {error}")
             raise
 
     def set_value(self, section, option, value=None):
@@ -160,14 +182,16 @@ class ConfigManager:
             return True
             
         except Exception as error:
-            self.logger.error(f"更新配置失败: {error}")
+            logger = self.get_logger()
+            logger.error(f"更新配置失败: {error}")
             return False
 
     def get_token(self):
+        logger = self.get_logger()
         try:
             # 直接使用类常量
             if not os.path.exists(self.TOKEN_FILE):
-                self.logger.error(f"令牌文件不存在: {self.TOKEN_FILE}")
+                logger.error(f"令牌文件不存在: {self.TOKEN_FILE}")
                 return None
             
             with open(self.TOKEN_FILE, 'r') as token_file:
@@ -175,7 +199,7 @@ class ConfigManager:
             
             # 从密钥文件读取密钥
             if not os.path.exists(self.KEY_FILE):
-                self.logger.error(f"密钥文件不存在: {self.KEY_FILE}")
+                logger.error(f"密钥文件不存在: {self.KEY_FILE}")
                 return None
             
             with open(self.KEY_FILE, 'r') as key_file:
@@ -187,7 +211,7 @@ class ConfigManager:
             return fernet.decrypt(encrypted_token.encode()).decode()
             
         except Exception as error:
-            self.logger.error(f"解密令牌失败: {error}")
+            logger.error(f"解密令牌失败: {error}")
             return None
 
     def update_token(self, new_token):
@@ -205,7 +229,8 @@ class ConfigManager:
             return True
             
         except Exception as error:
-            self.logger.error(f"更新令牌失败: {error}")
+            logger = self.get_logger()
+            logger.error(f"更新令牌失败: {error}")
             return False
 
     def reload(self):
@@ -220,5 +245,41 @@ class ConfigManager:
                 os.remove(self.CONFIG_FILE)
             return self.create_default_config()
         except Exception as error:
-            self.log('error', f"重置配置失败: {error}")
+            logger = self.get_logger()
+            logger.error('error', f"重置配置失败: {error}")
             return False
+    
+    def set_log_config(self, key, value):
+        """设置日志配置项
+        
+        Args:
+            key: 配置项名称 (log_level, log_dir, log_file, max_size, backup_count, retention_days, log_format)
+            value: 配置值
+        """
+        try:
+            import yaml
+            
+            # 读取现有配置
+            if os.path.exists(self.LOG_CONFIG_FILE):
+                with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+            else:
+                config = {}
+            
+            # 更新配置项
+            config[key] = value
+            
+            # 写入配置
+            os.makedirs(os.path.dirname(self.LOG_CONFIG_FILE), exist_ok=True)
+            with open(self.LOG_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                yaml.dump(config, f, allow_unicode=True)
+            
+            # 重新加载日志系统
+            from factory import Factory
+            Factory.reload_logger()
+            
+            return True
+            
+        except Exception as error:
+            logger = self.get_logger()
+            logger.error(f"更新日志配置失败: {error}")

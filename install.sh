@@ -328,7 +328,7 @@ create_config() {
         return 1
     fi
     
-    # 创建配置文件
+    # 创建主配置文件
     cat > "$CONFIG_FILE" << EOF
 [GENERAL]
 # 雷池WAF主机地址和端口
@@ -356,28 +356,6 @@ CACHE_CLEAN_INTERVAL = 3600
 # 日志清理间隔(秒)
 LOG_CLEAN_INTERVAL = 86400
 
-[LOGS]
-# 日志级别
-LEVEL = $log_level
-
-# 日志目录
-DIRECTORY = logs
-
-# 日志文件名
-FILENAME = erro.log
-
-# 日志文件最大大小(字节)
-MAX_SIZE = 10485760
-
-# 日志文件备份数量
-BACKUP_COUNT = 5
-
-# 日志保留天数
-RETENTION_DAYS = $log_retention_days
-
-# 日志格式
-FORMAT = %%(asctime)s - %%(name)s - %%(levelname)s - %%(message)s
-
 [TYPE_GROUP_MAPPING]
 # 高危攻击类型加入黑名单组
 0 = "$high_risk_ip_group"  # SQL注入
@@ -399,7 +377,23 @@ FORMAT = %%(asctime)s - %%(name)s - %%(levelname)s - %%(message)s
 EOF
     
     chmod 600 "$CONFIG_FILE"
-    echo -e "${GREEN}创建配置文件: $CONFIG_FILE${NC}"
+    echo -e "${GREEN}创建主配置文件: $CONFIG_FILE${NC}"
+    
+    # 创建日志配置文件 (YAML格式)
+    local LOG_CONFIG_FILE="$CONFIG_DIR/log.yaml"
+    cat > "$LOG_CONFIG_FILE" << EOF
+# 日志配置文件
+log_dir: logs
+log_file: erro.log
+log_level: $log_level
+max_size: 10485760
+backup_count: 5
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+retention_days: $log_retention_days
+EOF
+
+    chmod 600 "$LOG_CONFIG_FILE"
+    echo -e "${GREEN}创建日志配置文件: $LOG_CONFIG_FILE${NC}"
     
     return 0
 }
