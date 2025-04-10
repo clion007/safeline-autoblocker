@@ -283,12 +283,38 @@ create_config() {
     
     local host=$(get_user_input "雷池API地址" "localhost" "false")
     local port=$(get_user_input "雷池API端口" "9443" "false")
+    local api_prefix=$(get_user_input "API前缀路径" "/api/open" "false")
     local token=$(get_user_input "雷池API令牌" "" "true")
     local high_risk_ip_group=$(get_user_input "高危攻击IP组名称" "黑名单" "false")
     local low_risk_ip_group=$(get_user_input "低危攻击IP组名称" "人机验证" "false")
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
     local max_logs=$(get_user_input "每次查询最大日志数量" "100" "false")
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
+    
+    # 日志级别选择
+    echo -e "\n请选择日志级别:"
+    echo "1) DEBUG - 调试信息（最详细）"
+    echo "2) INFO - 一般信息（默认）"
+    echo "3) WARNING - 警告信息"
+    echo "4) ERROR - 错误信息"
+    echo "5) CRITICAL - 严重错误信息（最简略）"
+    
+    local log_level_choice
+    while true; do
+        read -p "请输入选项 [1-5] (默认: 2): " log_level_choice
+        log_level_choice=${log_level_choice:-2}
+        
+        case $log_level_choice in
+            1) log_level="DEBUG"; break ;;
+            2) log_level="INFO"; break ;;
+            3) log_level="WARNING"; break ;;
+            4) log_level="ERROR"; break ;;
+            5) log_level="CRITICAL"; break ;;
+            *) echo -e "${YELLOW}无效选项，请重新输入${NC}" ;;
+        esac
+    done
+    
+    echo -e "${GREEN}已选择日志级别: $log_level${NC}"
     
     # 生成密钥
     local key=$(generate_key)
@@ -304,10 +330,11 @@ create_config() {
     
     # 创建配置文件
     cat > "$CONFIG_FILE" << EOF
-[DEFAULT]
+[GENERAL]
 # 雷池WAF主机地址和端口
 SAFELINE_HOST = $host
 SAFELINE_PORT = $port
+API_PREFIX = $api_prefix
 
 # IP组名称
 HIGH_RISK_IP_GROUP = "$high_risk_ip_group"
@@ -319,8 +346,37 @@ QUERY_INTERVAL = $query_interval
 # 每次查询最大日志数量
 MAX_LOGS_PER_QUERY = $max_logs
 
+# 攻击类型过滤（留空表示不过滤）
+ATTACK_TYPES_FILTER = ""
+
+[MAINTENANCE]
+# 缓存清理间隔(秒)
+CACHE_CLEAN_INTERVAL = 3600
+
+# 日志清理间隔(秒)
+LOG_CLEAN_INTERVAL = 86400
+
+[LOGS]
+# 日志级别
+LEVEL = $log_level
+
+# 日志目录
+DIRECTORY = logs
+
+# 日志文件名
+FILENAME = erro.log
+
+# 日志文件最大大小(字节)
+MAX_SIZE = 10485760
+
+# 日志文件备份数量
+BACKUP_COUNT = 5
+
 # 日志保留天数
-LOG_RETENTION_DAYS = $log_retention_days
+RETENTION_DAYS = $log_retention_days
+
+# 日志格式
+FORMAT = %%(asctime)s - %%(name)s - %%(levelname)s - %%(message)s
 
 [TYPE_GROUP_MAPPING]
 # 高危攻击类型加入黑名单组

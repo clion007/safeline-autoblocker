@@ -7,7 +7,6 @@ API交互模块
 import time
 import requests
 from datetime import datetime
-from logger import LoggerManager
 from config import ConfigManager
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -15,21 +14,32 @@ from requests.packages.urllib3.util.retry import Retry
 class SafeLineAPI:
     """雷池WAF API交互类"""
     
-    def __init__(self, host, port, token, logger_instance=None, **kwargs):
+    # 移除单例相关代码，由工厂类负责单例管理
+    
+    def __init__(self, config_manager, logger):
         """初始化API客户端"""
-        self.host = host
-        self.port = port
-        self.token = token
-        self.logger = logger_instance or LoggerManager.get_instance().get_logger()
+        if hasattr(self, '_initialized'):
+            return
+            
+        self.logger = logger
         
-        # 从配置管理器获取配置
-        config_manager = ConfigManager.get_instance()
+        # 获取基本配置
+        self.host = config_manager.get_value('GENERAL', 'SAFELINE_HOST')
+        self.port = config_manager.get_value('GENERAL', 'SAFELINE_PORT')
+        self.token = config_manager.get_token()
+        
+        if not self.token:
+            self.logger.error("无法获取有效的API令牌")
+            raise ValueError("无效的API令牌")
+        
+        # 获取API前缀路径
+        self.api_prefix = config_manager.get_value('GENERAL', 'API_PREFIX')
         
         # 设置参数
-        self.cache_expiry = config_manager.get_value('api', 'cache_expiry')
-        self.ip_batch_size = config_manager.get_value('api', 'ip_batch_size')
-        self.ip_batch_interval = config_manager.get_value('api', 'ip_batch_interval')
-        self.ip_groups_cache_ttl = config_manager.get_value('api', 'ip_groups_cache_ttl')
+        self.cache_expiry = int(config_manager.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL', 3600))
+        self.ip_batch_size = int(config_manager.get_value('GENERAL', 'IP_BATCH_SIZE', 20))
+        self.ip_batch_interval = int(config_manager.get_value('GENERAL', 'IP_BATCH_INTERVAL', 60))
+        self.ip_groups_cache_ttl = int(config_manager.get_value('GENERAL', 'IP_GROUPS_CACHE_TTL', 300))
         
         self.session = requests.Session()
         self.headers = {
@@ -37,11 +47,8 @@ class SafeLineAPI:
             'Content-Type': 'application/json'
         }
         
-        # 设置日志记录器
-        self.logger = logger_instance or logger
-        
         # 设置重试策略
-        self.session = requests.Session()
+        max_retries = int(config_manager.get_value('GENERAL', 'MAX_RETRIES', 3))
         # 禁用SSL警告
         requests.packages.urllib3.disable_warnings()
         # 禁用SSL验证
@@ -58,7 +65,6 @@ class SafeLineAPI:
         # IP组缓存
         self.ip_groups_cache = {}
         self.ip_groups_cache_time = None
-        self.ip_groups_cache_ttl = ip_group_cache_ttl
         
         # 已添加IP缓存
         self.added_ips_cache = {}
@@ -67,14 +73,12 @@ class SafeLineAPI:
         self.ip_batch_queue = {}
         self.last_batch_process_time = time.time()
         
-        # 缓存配置
-        self.ip_batch_size = ip_batch_size
-        self.ip_batch_interval = ip_batch_interval
-        self.cache_expiry = cache_expiry
+        self._initialized = True
+        self.logger.info(f"成功初始化API客户端，连接到 {self.host}:{self.port}")
     
     def get_attack_logs(self, limit=100, attack_type=None):
         """获取攻击日志"""
-        url = f"https://{self.host}:{self.port}/api/open/records"
+        url = f"https://{self.host}:{self.port}{self.api_prefix}/records"
         
         # 使用page和page_size参数获取最新的日志
         params = {
@@ -155,7 +159,7 @@ class SafeLineAPI:
                 continue
             
             # 使用现有API更新IP组
-            url = f"https://{self.host}:{self.port}/api/open/ipgroup"
+            url = f"https://{self.host}:{self.port}{self.api_prefix}/ipgroup"
             
             data = {
                 "id": group_id,
@@ -205,7 +209,7 @@ class SafeLineAPI:
             return self.ip_groups_cache[group_name]
         
         # 缓存无效，重新获取所有IP组
-        url = f"https://{self.host}:{self.port}/api/open/ipgroup"
+        url = f"https://{self.host}:{self.port}{self.api_prefix}/ipgroup"
         
         try:
             # 确保禁用SSL验证
@@ -216,7 +220,7 @@ class SafeLineAPI:
             
             result = response.json()
             if 'data' not in result or 'nodes' not in result['data']:
-                self.logger.error("IP组数据格式不正确")  # 修改：使用self.logger替代logger
+                self.logger.error("IP组数据格式不正确")
                 return None
             
             # 更新缓存
@@ -226,7 +230,7 @@ class SafeLineAPI:
             for group in result['data']['nodes']:
                 if group.get('comment') == group_name:
                     # 获取详细信息
-                    detail_url = f"https://{self.host}:{self.port}/api/open/ipgroup/detail?id={group.get('id')}"
+                    detail_url = f"https://{self.host}:{self.port}{self.api_prefix}/ipgroup/detail?id={group.get('id')}"
                     # 确保禁用SSL验证
                     detail_response = self.session.get(detail_url, headers=self.headers, verify=False)
                     
@@ -240,7 +244,7 @@ class SafeLineAPI:
                     self.ip_groups_cache[group_name] = group
                     return group
             
-            self.logger.error(f"未找到名为 {group_name} 的IP组")  # 修改：使用self.logger替代logger
+            self.logger.error(f"未找到名为 {group_name} 的IP组")
             return None
         
         except Exception as error:
@@ -270,32 +274,3 @@ class SafeLineAPI:
         attack_types = config_manager.get_value('attack_types', 'types')
         attack_type_id = str(attack_type_id)
         return attack_types.get(attack_type_id, f"未知类型({attack_type_id})")
-
-def create_api_instance(config_manager, logger_instance=None):
-    """创建API实例"""
-    logger_to_use = logger_instance or LoggerManager.get_instance().get_logger()
-    
-    try:
-        # 获取配置值
-        host = config_manager.get_value('api', 'host')
-        port = config_manager.get_value('api', 'port')
-        token = config_manager.get_token()
-        
-        if not token:
-            logger_to_use.error("无法获取有效的API令牌")
-            return None
-        
-        # 创建API实例
-        api = SafeLineAPI(
-            host=host,
-            port=port,
-            token=token,
-            logger_instance=logger_to_use
-        )
-        
-        logger_to_use.info(f"成功创建API实例，连接到 {host}:{port}")
-        return api
-        
-    except Exception as error:
-        logger_to_use.error(f"创建API实例失败: {str(error)}")
-        return None

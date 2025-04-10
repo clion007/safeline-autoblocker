@@ -5,9 +5,8 @@
 """
 
 import os
-import threading
 import configparser
-from logger import LoggerManager
+import logging
 
 class ConfigManager:
     """配置管理类"""
@@ -18,35 +17,34 @@ class ConfigManager:
     TOKEN_FILE = f"{CONFIG_DIR}/token.enc"
     CONFIG_FILE = f"{CONFIG_DIR}/setting.conf"
     
-    # 定义默认配置常量
-    DEFAULT_CONFIG = {
-        'GENERAL': {
-            'SAFELINE_HOST': 'localhost',
-            'SAFELINE_PORT': '9443',
-            'HIGH_RISK_IP_GROUP': '黑名单',
-            'LOW_RISK_IP_GROUP': '人机验证',
-            'QUERY_INTERVAL': '60',
-            'MAX_LOGS_PER_QUERY': '100',
-            'LOG_RETENTION_DAYS': '30',
-            'ATTACK_TYPES_FILTER': ''
-        },
-        'TYPE_GROUP_MAPPING': {
-            '0': '黑名单',   # SQL注入
-            '5': '黑名单',   # 后门
-            '7': '黑名单',   # 代码执行
-            '8': '黑名单',   # 代码注入
-            '9': '黑名单',   # 命令注入
-            '11': '黑名单',  # 文件包含
-            '29': '黑名单',  # 模板注入
-            '1': '人机验证', # XSS
-            '2': '人机验证', # CSRF
-            '3': '人机验证', # SSRF
-            '4': '人机验证', # 拒绝服务
-            '6': '人机验证', # 反序列化
-            '10': '人机验证', # 文件上传
-            '21': '人机验证'  # 扫描器
-        }
-    }
+    def __init__(self, logger=None):
+        """初始化配置管理器"""
+        if hasattr(self, '_initialized'):
+            return
+     
+        self._logger = logger
+        
+        # 加载配置
+        self._config = None
+        self.load()
+        
+        # 配置加载后，如果没有logger，尝试从工厂获取
+        if self._logger is None:
+            try:
+                from factory import Factory
+                self._logger = Factory.get_logger()
+            except (ImportError, AttributeError):
+                # 如果无法获取工厂日志，则不记录日志
+                pass
+                
+        self._initialized = True
+    
+    # 删除 _create_default_logger 方法
+    
+    def log(self, level, message):
+        """记录日志"""
+        if self._logger:
+            getattr(self._logger, level.lower())(message)
     
     @classmethod
     def get_path(cls, path_type):
@@ -65,25 +63,12 @@ class ConfigManager:
         }
         return path_mapping.get(path_type)
     
-    _instance = None
-    _lock = threading.Lock()
+    # 移除重复的单例代码
     
-    @classmethod
-    def get_instance(cls):
-        """获取配置管理器实例（线程安全）"""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls.__new__(cls)
-                    cls._instance._init_instance()
-        return cls._instance
-
-    def __init__(self):
-            """初始化配置管理器"""
-            self.logger = LoggerManager.get_instance().get_logger()
-            self._config = None
-            self.load()
-
+    def is_loaded(self):
+        """检查配置是否已加载"""
+        return self._config is not None
+    
     def _validate_and_repair_config(self, config):
         is_modified = False
         
@@ -222,4 +207,19 @@ class ConfigManager:
             
         except Exception as error:
             self.logger.error(f"更新令牌失败: {error}")
+            return False
+
+    def reload(self):
+        """重新加载配置"""
+        return self.load()
+    
+    def reset(self):
+        """重置配置为默认值"""
+        # 实现重置逻辑
+        try:
+            if os.path.exists(self.CONFIG_FILE):
+                os.remove(self.CONFIG_FILE)
+            return self.create_default_config()
+        except Exception as error:
+            self.log('error', f"重置配置失败: {error}")
             return False

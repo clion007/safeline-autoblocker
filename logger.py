@@ -7,76 +7,108 @@
 import os
 import glob
 import logging
-import threading
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
 class LoggerManager:
-    # 定义日志相关常量
-    BACKUP_COUNT = 5
-    LOG_DIR = "logs"
-    LOG_LEVEL = logging.ERROR
-    LOG_FILE = f"{LOG_DIR}/erro.log"
-    MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
-    LOG_PATTERN = f"{LOG_DIR}/erro*.log*"
-    LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    # 移除单例相关代码，由工厂类负责单例管理
     
-    _instance = None
-    _lock = threading.Lock()
-    
-    @classmethod
-    def get_instance(cls):
-        """获取线程安全的单例实例"""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:  # 双检锁
-                    cls._instance = cls.__new__(cls)
-                    cls._instance.__init__()
-        return cls._instance
-    
-    def __init__(self):
-        """初始化方法（通过单例控制只执行一次）"""
-        if not hasattr(self, '_initialized'):
-            self._logger = None
+    def __init__(self, config_manager=None):
+        """初始化方法"""
+        if hasattr(self, '_initialized'):
+            return
+            
+        self._logger = None
+        self._config_manager = config_manager
+        
+        try:
+            # 如果没有传入配置管理器，尝试使用工厂获取
+            if self._config_manager is None:
+                from factory import Factory
+                self._config_manager = Factory.get_config_manager()
+            
+            # 获取日志配置
+            log_level_name = self._config_manager.get_value('LOGS', 'LEVEL', 'INFO')
+            # 更健壮的日志级别处理
+            log_levels = {
+                'DEBUG': logging.DEBUG,
+                'INFO': logging.INFO,
+                'WARNING': logging.WARNING,
+                'ERROR': logging.ERROR,
+                'CRITICAL': logging.CRITICAL
+            }
+            log_level = log_levels.get(log_level_name.upper(), logging.INFO)
+            
+            log_dir = self._config_manager.get_value('LOGS', 'DIRECTORY', 'logs')
+            log_file = self._config_manager.get_value('LOGS', 'FILENAME', 'erro.log')
+            
+            # 使用默认值避免类型转换异常
             try:
-                # 初始化日志记录器的实际逻辑
-                os.makedirs(self.LOG_DIR, exist_ok=True)
-                
-                logger = logging.getLogger('autoblocker')
-                logger.setLevel(self.LOG_LEVEL)
-                logger.handlers.clear()
-                
-                # 控制台处理器
-                console_handler = logging.StreamHandler()
-                console_handler.setLevel(self.LOG_LEVEL)
-                
-                # 文件处理器
-                file_handler = RotatingFileHandler(
-                    self.LOG_FILE,
-                    maxBytes=self.MAX_LOG_SIZE,
-                    backupCount=self.BACKUP_COUNT,
-                    encoding='utf-8'
-                )
-                file_handler.setLevel(self.LOG_LEVEL)
-                
-                # 设置格式化器
-                formatter = logging.Formatter(self.LOG_FORMAT)
-                console_handler.setFormatter(formatter)
-                file_handler.setFormatter(formatter)
-                
-                # 添加处理器
-                logger.addHandler(console_handler)
-                logger.addHandler(file_handler)
-                
-                self._logger = logger
-                
-            except Exception as error:
-                logging.error(f"初始化日志记录器失败: {error}")
-                logging.basicConfig(level=self.LOG_LEVEL, format=self.LOG_FORMAT)
-                self._logger = logging.getLogger('autoblocker')
+                max_size = int(self._config_manager.get_value('LOGS', 'MAX_SIZE', '10485760'))
+            except (ValueError, TypeError):
+                max_size = 10 * 1024 * 1024  # 默认10MB
             
-            self._initialized = True
+            try:
+                backup_count = int(config_manager.get_value('LOGS', 'BACKUP_COUNT', '5'))
+            except (ValueError, TypeError):
+                backup_count = 5
             
+            log_format = config_manager.get_value('LOGS', 'FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            
+            # 初始化日志记录器
+            os.makedirs(log_dir, exist_ok=True)
+            
+            logger = logging.getLogger('autoblocker')
+            logger.setLevel(log_level)
+            logger.handlers.clear()
+            
+            # 控制台处理器
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(log_level)
+            
+            # 文件处理器
+            file_path = os.path.join(log_dir, log_file)
+            file_handler = RotatingFileHandler(
+                file_path,
+                maxBytes=max_size,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(log_level)
+            
+            # 设置格式化器
+            formatter = logging.Formatter(log_format)
+            console_handler.setFormatter(formatter)
+            file_handler.setFormatter(formatter)
+            
+            # 添加处理器
+            logger.addHandler(console_handler)
+            logger.addHandler(file_handler)
+            
+            self._logger = logger
+            self._log_dir = log_dir
+            self._log_file = log_file
+            
+        except Exception as error:
+            # 如果初始化失败，创建一个最基本的控制台日志记录器
+            # 这是唯一允许的非工厂日志实例，仅用于记录初始化失败
+            logger = logging.getLogger('autoblocker_emergency')
+            logger.setLevel(logging.ERROR)
+            logger.handlers.clear()
+            
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.ERROR)
+            formatter = logging.Formatter('%(asctime)s - EMERGENCY - %(levelname)s - %(message)s')
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
+            
+            self._logger = logger
+            self._logger.error(f"初始化日志系统时出错: {str(error)}")
+        
+        self._initialized = True
+    
+    # 删除 _create_default_logger 方法，或将其改为私有的紧急日志创建方法
+    
     def get_logger(self):
         """获取日志记录器"""
         return self._logger
@@ -88,7 +120,8 @@ class LoggerManager:
             cutoff_date = datetime.now() - timedelta(days=retention_days)
             
             # 查找所有日志文件
-            log_files = glob.glob(self.LOG_PATTERN)
+            log_pattern = os.path.join(self._log_dir, f"{os.path.splitext(self._log_file)[0]}*.*")
+            log_files = glob.glob(log_pattern)
             
             # 删除过期日志
             deleted_count = 0
