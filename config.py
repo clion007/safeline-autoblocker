@@ -6,7 +6,6 @@
 
 import os
 import configparser
-import logging
 
 class ConfigManager:
     """配置管理类"""

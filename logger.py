@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
 class LoggerManager:
-    # 移除单例相关代码，由工厂类负责单例管理
     
     def __init__(self, config_manager=None):
         """初始化方法"""
@@ -90,7 +89,6 @@ class LoggerManager:
             self._log_file = log_file
             
         except Exception as error:
-            # 如果初始化失败，创建一个最基本的控制台日志记录器
             # 这是唯一允许的非工厂日志实例，仅用于记录初始化失败
             logger = logging.getLogger('autoblocker_emergency')
             logger.setLevel(logging.ERROR)
@@ -106,8 +104,6 @@ class LoggerManager:
             self._logger.error(f"初始化日志系统时出错: {str(error)}")
         
         self._initialized = True
-    
-    # 删除 _create_default_logger 方法，或将其改为私有的紧急日志创建方法
     
     def get_logger(self):
         """获取日志记录器"""
