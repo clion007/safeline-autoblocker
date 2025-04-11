@@ -329,52 +329,52 @@ create_config() {
     fi
     
     # 创建主配置文件
+    local ip_batch_size=$(get_user_input "批量处理IP数量" "50" "false")
+    local ip_batch_interval=$(get_user_input "批量处理间隔（秒）" "300" "false")
+    local ip_groups_cache_ttl=$(get_user_input "IP组缓存有效期（秒）" "3600" "false")
+    local max_retries=$(get_user_input "API请求最大重试次数" "3" "false")
+    
+    # 更新配置文件写入
     cat > "$CONFIG_FILE" << EOF
-[GENERAL]
-# 雷池WAF主机地址和端口
-SAFELINE_HOST = $host
-SAFELINE_PORT = $port
-API_PREFIX = $api_prefix
-
-# IP组名称
-HIGH_RISK_IP_GROUP = "$high_risk_ip_group"
-LOW_RISK_IP_GROUP = "$low_risk_ip_group"
-
-# 查询间隔(秒)
-QUERY_INTERVAL = $query_interval
-
-# 每次查询最大日志数量
-MAX_LOGS_PER_QUERY = $max_logs
-
-# 攻击类型过滤（留空表示不过滤）
-ATTACK_TYPES_FILTER = ""
-
-[MAINTENANCE]
-# 缓存清理间隔(秒)
-CACHE_CLEAN_INTERVAL = 3600
-
-# 日志清理间隔(秒)
-LOG_CLEAN_INTERVAL = 86400
-
-[TYPE_GROUP_MAPPING]
-# 高危攻击类型加入黑名单组
-0 = "$high_risk_ip_group"  # SQL注入
-5 = "$high_risk_ip_group"  # 后门
-7 = "$high_risk_ip_group"  # 代码执行
-8 = "$high_risk_ip_group"  # 代码注入
-9 = "$high_risk_ip_group"  # 命令注入
-11 = "$high_risk_ip_group" # 文件包含
-29 = "$high_risk_ip_group" # 模板注入
-
-# 低危攻击类型加入人机验证组
-1 = "$low_risk_ip_group"  # XSS
-2 = "$low_risk_ip_group"  # CSRF
-3 = "$low_risk_ip_group"  # SSRF
-4 = "$low_risk_ip_group"  # 拒绝服务
-6 = "$low_risk_ip_group"  # 反序列化
-10 = "$low_risk_ip_group" # 文件上传
-21 = "$low_risk_ip_group" # 扫描器
-EOF
+    [GENERAL]
+    # 雷池WAF主机地址和端口
+    SAFELINE_HOST = $host
+    SAFELINE_PORT = $port
+    API_PREFIX = $api_prefix
+    
+    # IP组名称
+    HIGH_RISK_IP_GROUP = "$high_risk_ip_group"
+    LOW_RISK_IP_GROUP = "$low_risk_ip_group"
+    
+    # 查询间隔(秒)
+    QUERY_INTERVAL = $query_interval
+    
+    # 每次查询最大日志数量
+    MAX_LOGS_PER_QUERY = $max_logs
+    
+    # 攻击类型过滤（留空表示不过滤）
+    ATTACK_TYPES_FILTER = ""
+    
+    # API批量处理配置
+    IP_BATCH_SIZE = $ip_batch_size
+    IP_BATCH_INTERVAL = $ip_batch_interval
+    IP_GROUPS_CACHE_TTL = $ip_groups_cache_ttl
+    MAX_RETRIES = $max_retries
+    
+    [MAINTENANCE]
+    # 缓存清理间隔(秒)
+    CACHE_CLEAN_INTERVAL = 3600
+    
+    # 日志清理间隔(秒)
+    LOG_CLEAN_INTERVAL = 86400
+    
+    [TYPE_GROUP]
+    # 高危攻击类型
+    HIGH_RISK_TYPES = "0,5,7,8,9,11,29"  # SQL注入,后门,代码执行,代码注入,命令注入,文件包含,模板注入
+    
+    # 低危攻击类型
+    LOW_RISK_TYPES = "1,2,3,4,6,10,21"   # XSS,CSRF,SSRF,拒绝服务,反序列化,文件上传,扫描器
+    EOF
     
     chmod 600 "$CONFIG_FILE"
     echo -e "${GREEN}创建主配置文件: $CONFIG_FILE${NC}"
@@ -382,16 +382,16 @@ EOF
     # 创建日志配置文件 (YAML格式)
     local LOG_CONFIG_FILE="$CONFIG_DIR/log.yaml"
     cat > "$LOG_CONFIG_FILE" << EOF
-# 日志配置文件
-log_dir: logs
-log_file: erro.log
-log_level: $log_level
-max_size: 10485760
-backup_count: 5
-log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-retention_days: $log_retention_days
-EOF
-
+    # 日志配置文件
+    log_dir: logs
+    log_file: erro.log
+    log_level: $log_level
+    max_size: 10485760
+    backup_count: 5
+    log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    retention_days: $log_retention_days
+    EOF
+    
     chmod 600 "$LOG_CONFIG_FILE"
     echo -e "${GREEN}创建日志配置文件: $LOG_CONFIG_FILE${NC}"
     
@@ -403,18 +403,18 @@ create_service() {
     print_step 4 6 "创建系统服务"
     
     cat > "$SERVICE_FILE" << EOF
-[Unit]
-Description=SafeLine Auto Blocker
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    [Unit]
+    Description=SafeLine Auto Blocker
+    After=network.target
+    
+    [Service]
+    Type=simple
+    ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
+    Restart=always
+    
+    [Install]
+    WantedBy=multi-user.target
+    EOF
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}创建服务文件失败${NC}"

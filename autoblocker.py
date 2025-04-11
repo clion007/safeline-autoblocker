@@ -14,23 +14,23 @@ SafeLine AutoBlocker
 
 import sys
 import time
+from factory import Factory
 from datetime import datetime, timedelta
 from version import PROGRAM_NAME, get_version_string
-from factory import Factory
 
-def perform_log_maintenance(current_time, last_times, config_manager, api, logger_instance=None, log_directory=None):
+def perform_log_maintenance(current_time, last_times, configer, api, logger_instance=None, log_directory=None):
     """集中处理日志维护任务"""    
     logger_to_use = logger_instance or Factory.get_logger()
     
     # 检查是否需要清理缓存
-    if (current_time - last_times['cache_clean']).total_seconds() > int(config_manager.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL')):
+    if (current_time - last_times['cache_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL')):
         logger_to_use.debug("执行缓存清理")
         api.clean_cache()
         last_times['cache_clean'] = current_time
     
     # 检查是否需要清理日志
-    log_retention_days = int(config_manager.get_value('LOGS', 'RETENTION_DAYS'))
-    if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(config_manager.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
+    log_retention_days = int(configer.get_value('LOGS', 'RETENTION_DAYS'))
+    if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
         logger_to_use.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
         # 修改：使用工厂模式获取日志管理器
         Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
@@ -38,16 +38,13 @@ def perform_log_maintenance(current_time, last_times, config_manager, api, logge
     
     return last_times
 
-def process_attack_logs(api, config_manager, logger_instance=None):
+def process_attack_logs(api, configer, logger_instance=None):
     """处理攻击日志的通用函数"""
     logger_to_use = logger_instance or Factory.get_logger()
     
     # 获取配置值
-    high_risk_ip_group = config_manager.get_value('ip_groups', 'high_risk')
-    low_risk_ip_group = config_manager.get_value('ip_groups', 'low_risk')
-    type_group_mapping = config_manager.get_value('attack_types', 'group_mapping')
-    attack_types_filter = config_manager.get_value('attack_types', 'filter')
-    max_logs = config_manager.get_value('api', 'max_logs_per_query')
+    max_logs = configer.get_value('GENERAL', 'MAX_LOGS_PER_QUERY')
+    attack_types_filter = configer.get_value('GENERAL', 'ATTACK_TYPES_FILTER')
     
     # 获取攻击日志
     logs = api.get_attack_logs(limit=max_logs)
@@ -61,8 +58,21 @@ def process_attack_logs(api, config_manager, logger_instance=None):
     # 处理每条日志
     processed_count = 0
     for log_entry in logs:
-        if process_log_entry(log_entry, api, low_risk_ip_group, high_risk_ip_group, 
-                          type_group_mapping, attack_types_filter, logger_to_use):
+        attack_type = str(log_entry.get('attack_type'))
+        
+        # 检查攻击类型过滤
+        if attack_types_filter and attack_type not in attack_types_filter.split(','):
+            continue
+            
+        # 获取对应的IP组
+        ip_group = api.get_ip_group_for_attack_type(attack_type)
+        if not ip_group:
+            continue
+            
+        # 添加IP到批处理队列
+        ip = log_entry.get('client_ip')
+        reason = f"攻击类型: {attack_type}"
+        if api.add_ip_to_batch(ip, reason, ip_group):
             processed_count += 1
     
     if processed_count > 0:
@@ -70,10 +80,10 @@ def process_attack_logs(api, config_manager, logger_instance=None):
     
     return processed_count
 
-def api_monitor(config_manager=None, logger_instance=None, existing_api=None):
+def api_monitor(configer=None, logger_instance=None, existing_api=None):
     """API监控函数"""
-    config_manager = config_manager or Factory.get_config_manager()
-    if not config_manager.load():
+    configer = configer or Factory.get_configer()
+    if not configer.load():
         return False
     
     logger_to_use = logger_instance or Factory.get_logger()
@@ -86,7 +96,7 @@ def api_monitor(config_manager=None, logger_instance=None, existing_api=None):
     
     # 初始化时间记录
     last_times = {
-        'query': datetime.now() - timedelta(seconds=config_manager.get_value('api', 'query_interval')),
+        'query': datetime.now() - timedelta(seconds=configer.get_value('GENERAL', 'QUERY_INTERVAL')),
         'log_clean': datetime.now(),
         'cache_clean': datetime.now()
     }
@@ -98,13 +108,13 @@ def api_monitor(config_manager=None, logger_instance=None, existing_api=None):
             current_time = datetime.now()
             
             # 检查是否需要查询新日志
-            if (current_time - last_times['query']).total_seconds() > config_manager.get_value('api', 'query_interval'):
-                process_attack_logs(api, config_manager, logger_to_use)
+            if (current_time - last_times['query']).total_seconds() > configer.get_value('api', 'query_interval'):
+                process_attack_logs(api, configer, logger_to_use)
                 last_times['query'] = current_time
             
             # 每天清理一次旧日志
             if current_time.day != last_times['log_clean'].day:
-                last_times = perform_log_maintenance(current_time, last_times, config_manager, api, logger_to_use)
+                last_times = perform_log_maintenance(current_time, last_times, configer, api, logger_to_use)
             
             time.sleep(1)
     
@@ -159,14 +169,14 @@ def parse_arguments():
 def main():
     """主函数"""
     # 获取配置管理器
-    config_manager = Factory.get_config_manager()
+    configer = Factory.get_configer()
     
     # 解析命令行参数
     args = parse_arguments()
     
     # 如果指定了日志级别，更新配置
     if hasattr(args, 'log_level') and args.log_level:
-        config_manager.set_value('LOGS', 'LEVEL', args.log_level)
+        configer.set_value('LOGS', 'LEVEL', args.log_level)
         # 重置日志管理器，使其重新初始化
         Factory.reset()
     
@@ -175,11 +185,11 @@ def main():
     
     # 如果是配置命令，执行配置操作并退出
     if args.command:
-        return handle_config_command(args, config_manager, logger)
+        return handle_config_command(args, configer, logger)
     
     # 清理日志
     if args.clean_logs:
-        log_retention_days = config_manager.get_value('LOGS', 'RETENTION_DAYS')
+        log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
         logger.info(f"手动清理日志，保留 {log_retention_days} 天")
         Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
         return 0
@@ -200,7 +210,7 @@ def main():
     if args.list_attack_types or args.get_logs:
         if api:
             if args.list_attack_types:
-                attack_types = config_manager.get_value('TYPE_GROUP_MAPPING', None)
+                attack_types = configer.get_value('TYPE_GROUP_MAPPING', None)
                 if attack_types:
                     print("\n雷池WAF支持的攻击类型:")
                     print("ID | 名称")
@@ -230,7 +240,7 @@ def main():
     
     # 默认为API监控模式，直接使用已创建的API实例和日志记录器
     if api:  # 确保API实例存在
-        result = api_monitor(config_manager, logger, api)
+        result = api_monitor(configer, logger, api)
         if not result:
             logger.error("API监控模式异常退出")
             return 1
@@ -240,24 +250,24 @@ def main():
     
     return 0
 
-def handle_config_command(args, config_manager, logger=None):
+def handle_config_command(args, configer, logger=None):
     """处理配置相关命令"""
     logger = logger or Factory.get_logger()
     
     if args.command == 'view':
-        if not config_manager.is_loaded():  # 使用方法检查配置状态
+        if not configer.is_loaded():  # 使用方法检查配置状态
             logger.error("错误: 配置未加载")
             return 1
             
         if args.section and args.option:
-            value = config_manager.get_value(args.section, args.option)
+            value = configer.get_value(args.section, args.option)
             if value is not None:
                 print(f"{args.section}.{args.option} = {value}")
             else:
                 logger.error(f"错误: 配置项 {args.section}.{args.option} 不存在")
                 return 1
         elif args.section:
-            section_data = config_manager.get_section(args.section)
+            section_data = configer.get_section(args.section)
             if section_data:
                 print(f"[{args.section}]")
                 for option, value in section_data.items():
@@ -266,10 +276,10 @@ def handle_config_command(args, config_manager, logger=None):
                 logger.error(f"错误: 配置部分 {args.section} 不存在")
                 return 1
         else:
-            config_manager.print_config()  # 使用配置管理器的方法
+            configer.print_config()  # 使用配置管理器的方法
     
     elif args.command == 'set':
-        if config_manager.set_value(args.section, args.option, args.value):
+        if configer.set_value(args.section, args.option, args.value):
             logger.info(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
         else:
             logger.error(f"错误: 设置 {args.section}.{args.option} 失败")
@@ -280,14 +290,14 @@ def handle_config_command(args, config_manager, logger=None):
             logger.warning("警告: 此操作将重置所有配置为默认值。如果确认，请添加 --confirm 参数。")
             return 1
         
-        if config_manager.reset():  # 修改方法名
+        if configer.reset():  # 修改方法名
             logger.info("成功: 配置已重置为默认值")
         else:
             logger.error("错误: 重置配置失败")
             return 1
     
     elif args.command == 'reload':
-        if config_manager.reload():  # 添加重新加载方法
+        if configer.reload():  # 添加重新加载方法
             logger.info("成功: 配置已重新加载")
         else:
             logger.error("错误: 重新加载配置失败")

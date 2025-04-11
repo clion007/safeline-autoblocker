@@ -8,17 +8,17 @@
 class Factory:
     """服务工厂，用于创建和管理服务实例"""
     
-    _config_manager = None
+    _configer = None
     _logger_manager = None
     _api_client = None
     
     @classmethod
-    def get_config_manager(cls):
+    def get_configer(cls):
         """获取配置管理器实例"""
-        if cls._config_manager is None:
-            from config import ConfigManager
-            cls._config_manager = ConfigManager()
-        return cls._config_manager
+        if cls._configer is None:
+            from configer import ConfigManager
+            cls._configer = ConfigManager()
+        return cls._configer
     
     @classmethod
     def get_logger_manager(cls):
@@ -45,12 +45,12 @@ class Factory:
         """获取API客户端实例"""
         if cls._api_client is None:
             from api import SafeLineAPI
-            cls._api_client = SafeLineAPI(cls.get_config_manager(), cls.get_logger())
+            cls._api_client = SafeLineAPI(cls.get_configer(), cls.get_logger())
         return cls._api_client
     
     @classmethod
     def reset(cls):
         """重置所有服务实例"""
-        cls._config_manager = None
+        cls._configer = None
         cls._logger_manager = None
         cls._api_client = None

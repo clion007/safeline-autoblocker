@@ -6,39 +6,31 @@ API交互模块
 import time
 import requests
 from datetime import datetime
-from config import ConfigManager
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 class SafeLineAPI:
     """雷池WAF API交互类"""
     
-    # 移除单例相关代码，由工厂类负责单例管理
-    
-    def __init__(self, config_manager, logger):
+    def __init__(self, configer, logger):
         """初始化API客户端"""
         if hasattr(self, '_initialized'):
             return
             
         self.logger = logger
+        self.configer = configer
         
         # 获取基本配置
-        self.host = config_manager.get_value('GENERAL', 'SAFELINE_HOST')
-        self.port = config_manager.get_value('GENERAL', 'SAFELINE_PORT')
-        self.token = config_manager.get_token()
-        
-        if not self.token:
-            self.logger.error("无法获取有效的API令牌")
-            raise ValueError("无效的API令牌")
-        
-        # 获取API前缀路径
-        self.api_prefix = config_manager.get_value('GENERAL', 'API_PREFIX')
+        self.token = configer.get_token()
+        self.host = configer.get_value('GENERAL', 'SAFELINE_HOST')
+        self.port = configer.get_value('GENERAL', 'SAFELINE_PORT')
+        self.api_prefix = configer.get_value('GENERAL', 'API_PREFIX')
         
         # 设置参数
-        self.cache_expiry = int(config_manager.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL', 3600))
-        self.ip_batch_size = int(config_manager.get_value('GENERAL', 'IP_BATCH_SIZE', 20))
-        self.ip_batch_interval = int(config_manager.get_value('GENERAL', 'IP_BATCH_INTERVAL', 60))
-        self.ip_groups_cache_ttl = int(config_manager.get_value('GENERAL', 'IP_GROUPS_CACHE_TTL', 300))
+        self.cache_expiry = int(configer.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
+        self.ip_batch_size = int(configer.get_value('GENERAL', 'IP_BATCH_SIZE'))
+        self.ip_batch_interval = int(configer.get_value('GENERAL', 'IP_BATCH_INTERVAL'))
+        self.ip_groups_cache_ttl = int(configer.get_value('GENERAL', 'IP_GROUPS_CACHE_TTL'))
         
         self.session = requests.Session()
         self.headers = {
@@ -47,9 +39,7 @@ class SafeLineAPI:
         }
         
         # 设置重试策略
-        max_retries = int(config_manager.get_value('GENERAL', 'MAX_RETRIES', 3))
-        # 禁用SSL警告
-        requests.packages.urllib3.disable_warnings()
+        max_retries = int(configer.get_value('GENERAL', 'MAX_RETRIES'))
         # 禁用SSL验证
         self.session.verify = False
         retry_strategy = Retry(
@@ -267,9 +257,11 @@ class SafeLineAPI:
         if expired_keys:
             self.logger.debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
 
-    def get_attack_type_name(self, attack_type_id):
-        """获取攻击类型名称"""
-        config_manager = ConfigManager.get_instance()
-        attack_types = config_manager.get_value('attack_types', 'types')
-        attack_type_id = str(attack_type_id)
-        return attack_types.get(attack_type_id, f"未知类型({attack_type_id})")
+    def get_ip_group_id(self, attack_type_id):
+        """获取需要加入的IP组ID"""
+        # 根据攻击类型获取对应的IP组名称
+        group_name = self.configer.get_ip_group_for_attack_type(attack_type_id)
+        
+        # 获取IP组信息并返回ID
+        group_info = self._get_ip_group_info(group_name)
+        return group_info.get('id') if group_info else None

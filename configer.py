@@ -27,27 +27,19 @@ class ConfigManager:
             'LOW_RISK_IP_GROUP': '人机验证',
             'QUERY_INTERVAL': '60',
             'MAX_LOGS_PER_QUERY': '100',
-            'ATTACK_TYPES_FILTER': ''
+            'ATTACK_TYPES_FILTER': '',
+            'IP_BATCH_SIZE': '50',           # 批量处理IP的数量
+            'IP_BATCH_INTERVAL': '300',      # 批量处理间隔（秒）
+            'IP_GROUPS_CACHE_TTL': '3600',   # IP组缓存有效期（秒）
+            'MAX_RETRIES': '3'               # API请求最大重试次数
         },
         'MAINTENANCE': {
             'CACHE_CLEAN_INTERVAL': '3600',
             'LOG_CLEAN_INTERVAL': '86400'
         },
-        'TYPE_GROUP_MAPPING': {
-            '0': '黑名单',   # SQL注入
-            '5': '黑名单',   # 后门
-            '7': '黑名单',   # 代码执行
-            '8': '黑名单',   # 代码注入
-            '9': '黑名单',   # 命令注入
-            '11': '黑名单',  # 文件包含
-            '29': '黑名单',  # 模板注入
-            '1': '人机验证', # XSS
-            '2': '人机验证', # CSRF
-            '3': '人机验证', # SSRF
-            '4': '人机验证', # 拒绝服务
-            '6': '人机验证', # 反序列化
-            '10': '人机验证', # 文件上传
-            '21': '人机验证'  # 扫描器
+        'TYPE_GROUP': {
+            'HIGH_RISK_TYPES': '0,5,7,8,9,11,29',  # SQL注入,后门,代码执行,代码注入,命令注入,文件包含,模板注入
+            'LOW_RISK_TYPES': '1,2,3,4,6,10,21'    # XSS,CSRF,SSRF,拒绝服务,反序列化,文件上传,扫描器
         }
     }
     
@@ -208,7 +200,14 @@ class ConfigManager:
             # 解密令牌
             from cryptography.fernet import Fernet
             fernet = Fernet(key.encode())
-            return fernet.decrypt(encrypted_token.encode()).decode()
+            decrypted_token = fernet.decrypt(encrypted_token.encode()).decode()
+            
+            # 检查令牌是否有效
+            if not decrypted_token:
+                logger.error("无法获取有效的API令牌")
+                raise ValueError("无效的API令牌")
+            
+            return decrypted_token
             
         except Exception as error:
             logger.error(f"解密令牌失败: {error}")
@@ -283,3 +282,27 @@ class ConfigManager:
         except Exception as error:
             logger = self.get_logger()
             logger.error(f"更新日志配置失败: {error}")
+    
+    def get_risk_level_for_attack_type(self, attack_type_id):
+        """获取攻击类型的风险等级"""
+        high_risk_types = set(self.get_value('TYPE_GROUP', 'HIGH_RISK_TYPES').split(','))
+        low_risk_types = set(self.get_value('TYPE_GROUP', 'LOW_RISK_TYPES').split(','))
+        
+        attack_type_str = str(attack_type_id)
+        if attack_type_str in high_risk_types:
+            return 'HIGH'
+        elif attack_type_str in low_risk_types:
+            return 'LOW'
+        return 'LOW'  # 默认为低危
+    
+    def get_ip_group_for_attack_type(self, attack_type_id):
+        """根据攻击类型获取对应的IP组名称"""
+        try:
+            risk_level = self.get_risk_level_for_attack_type(attack_type_id)
+            if risk_level == 'HIGH':
+                return self.get_value('GENERAL', 'HIGH_RISK_IP_GROUP')
+            return self.get_value('GENERAL', 'LOW_RISK_IP_GROUP')
+        except Exception as error:
+            logger = self.get_logger()
+            logger.error(f"获取攻击类型 {attack_type_id} 对应的IP组失败: {error}")
+            return self.get_value('GENERAL', 'LOW_RISK_IP_GROUP')  # 默认返回低危IP组
