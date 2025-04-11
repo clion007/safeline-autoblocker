@@ -63,16 +63,18 @@ class SafeLineAPI:
         self.last_batch_process_time = time.time()
         
         self._initialized = True
-        self.logger.info(f"成功初始化API客户端，连接到 {self.host}:{self.port}")
     
-    def get_attack_logs(self, limit=100, attack_type=None):
+    def get_attack_logs(self, attack_type=None):
         """获取攻击日志"""
         url = f"https://{self.host}:{self.port}{self.api_prefix}/records"
+        
+        # 从配置中获取每次查询的日志数量
+        max_logs = self.configer.get_value('GENERAL', 'MAX_LOGS_PER_QUERY')
         
         # 使用page和page_size参数获取最新的日志
         params = {
             'page': 1,
-            'page_size': limit
+            'page_size': max_logs
         }
         
         if attack_type:
