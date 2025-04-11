@@ -122,7 +122,7 @@ class ConfigManager:
                     config.read(self.CONFIG_FILE)
             
             self._config = config
-            return True
+            return self
             
         except Exception as error:
             logger = self.get_logger()
