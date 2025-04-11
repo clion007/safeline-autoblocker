@@ -87,10 +87,7 @@ class SafeLineAPI:
                 result = response.json()
                 data = result.get('data', {}).get('data', [])
                 return data
-            else:
-                self.logger.error(f"获取攻击日志失败: {response.status_code} - {response.text}")
-                return []
-        except Exception as error:  # 修改: 使用更具描述性的变量名
+        except Exception as error:
             self.logger.error(f"获取攻击日志异常: {str(error)}")
             return []
     
