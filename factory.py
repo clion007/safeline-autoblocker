@@ -30,8 +30,15 @@ class Factory:
     
     @classmethod
     def get_logger(cls):
-        """获取日志记录器实例"""
-        return cls.get_logger_manager().get_logger()
+        """获取日志记录器"""
+        return cls._logger_manager.get_logger()
+    
+    @classmethod
+    def reload_logger(cls):
+        """重新加载日志系统"""
+        if cls._logger_manager is not None:
+            cls._logger_manager = None
+        return cls.get_logger()
     
     @classmethod
     def get_api_client(cls):
