@@ -186,8 +186,10 @@ download_files() {
     # 定义需要下载的文件列表
     local script_files=(
         "api.py"
-        "config.py"
         "logger.py"
+        "version.py"
+        "factory.py"
+        "configer.py"
         "$MAIN_SCRIPT"
         "$UNINSTALL_SCRIPT"
     )
