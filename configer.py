@@ -27,7 +27,7 @@ class ConfigManager:
             'LOW_RISK_IP_GROUP': '人机验证',
             'QUERY_INTERVAL': '60',
             'MAX_LOGS_PER_QUERY': '100',
-            'ATTACK_TYPES_FILTER': '',
+            'ATTACK_TYPES_FILTER': '-3',     # 默认过滤黑名单类型
             'IP_BATCH_SIZE': '50',           # 批量处理IP的数量
             'IP_BATCH_INTERVAL': '300',      # 批量处理间隔（秒）
             'IP_GROUPS_CACHE_TTL': '3600',   # IP组缓存有效期（秒）

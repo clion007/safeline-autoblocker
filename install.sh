@@ -354,8 +354,8 @@ create_config() {
     # 每次查询最大日志数量
     MAX_LOGS_PER_QUERY = $max_logs
     
-    # 攻击类型过滤（留空表示不过滤）
-    ATTACK_TYPES_FILTER = ""
+    # 攻击类型过滤（默认过滤黑名单攻击）
+    ATTACK_TYPES_FILTER = "-3"
     
     # API批量处理配置
     IP_BATCH_SIZE = $ip_batch_size

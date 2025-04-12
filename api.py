@@ -91,22 +91,72 @@ class SafeLineAPI:
             self.logger.error(f"获取攻击日志异常: {str(error)}")
             return []
     
-    def add_ip_to_batch(self, ip, reason, group_name):
+    def process_attack_logs(self):
+        """处理攻击日志并提取IP"""
+        # 获取攻击日志
+        logs = self.get_attack_logs()
+        
+        if not logs:
+            self.logger.debug("没有获取到攻击日志")
+            return 0
+        
+        # 处理每条日志
+        queued_count = 0
+        for log_entry in logs:
+            # 提取IP和攻击类型
+            ip = log_entry.get('src_ip')
+            if not ip:
+                continue
+                
+            attack_type = str(log_entry.get('attack_type'))
+            
+            # 获取攻击类型过滤配置
+            attack_types_filter = self.configer.get_value('GENERAL', 'ATTACK_TYPES_FILTER')
+            
+            # 检查攻击类型过滤
+            if attack_types_filter and attack_type not in attack_types_filter.split(','):
+                continue
+                
+            # 获取对应的IP组
+            ip_group = self.configer.get_ip_group_for_attack_type(attack_type)
+            if not ip_group:
+                continue
+            
+            # 直接将IP添加到批处理队列
+            self.add_ip_to_batch(ip, ip_group)
+            queued_count += 1
+        
+        # 强制处理批处理队列
+        if queued_count > 0:
+            self.process_ip_batch()
+        
+        return queued_count
+    
+    def add_ip_to_batch(self, ip, group_name):
         """将IP添加到批处理队列"""
+        
+        # 检查缓存中是否已添加该IP
+        cache_key = f"{ip}_{group_name}"
+        if cache_key in self.added_ips_cache:
+            return True
+
         if group_name not in self.ip_batch_queue:
             self.ip_batch_queue[group_name] = []
         
         # 检查IP是否已在队列中
         for item in self.ip_batch_queue[group_name]:
             if item['ip'] == ip:
-                # 更新原因
-                item['reason'] = reason
                 return
+        
+        # 检查IP是否已在目标IP组中
+        group_info = self._get_ip_group_info(group_name)
+        if group_info and ip in group_info.get('ips', []):
+            self.logger.debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
+            return
         
         # 添加新IP到队列
         self.ip_batch_queue[group_name].append({
-            'ip': ip,
-            'reason': reason
+            'ip': ip
         })
         
         # 检查是否需要处理批量队列
@@ -134,58 +184,95 @@ class SafeLineAPI:
             group_id = group_info.get('id')
             current_ips = group_info.get('ips', []).copy()
             
-            # 添加新IP到列表
-            added_count = 0
+            # 筛选出需要添加的IP
+            new_ips = []
             for item in ip_list:
                 ip = item['ip']
                 if ip not in current_ips:
+                    new_ips.append(ip)
                     current_ips.append(ip)
-                    added_count += 1
+                else:
+                    # IP已存在，更新缓存
+                    cache_key = f"{ip}_{group_name}"
+                    self.added_ips_cache[cache_key] = datetime.now()
             
-            if added_count == 0:
+            if not new_ips:
                 self.logger.debug(f"IP组 '{group_name}' 中没有新IP需要添加")
                 continue
             
-            # 使用现有API更新IP组
-            url = f"https://{self.host}:{self.port}{self.api_prefix}/ipgroup"
-            
-            data = {
-                "id": group_id,
-                "comment": group_name,
-                "reference": "",
-                "ips": current_ips
-            }
-            
-            try:
-                # 确保禁用SSL验证
-                response = self.session.put(url, headers=self.headers, json=data, verify=False)
-                success = response.status_code == 200 and response.json().get('err') is None
-                
-                if success:
-                    self.logger.info(f"成功批量添加 {added_count} 个IP到组 '{group_name}'")
-                    # 更新缓存
-                    for item in ip_list:
-                        cache_key = f"{item['ip']}_{group_name}"
-                        self.added_ips_cache[cache_key] = datetime.now()
-                else:
-                    self.logger.error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
-            except Exception as error:  # 修改: 使用更具描述性的变量名
-                self.logger.error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
+            # 批量更新IP组
+            self._update_ip_group(group_id, group_name, current_ips, new_ips)
         
         # 清空队列
         self.ip_batch_queue = {}
         self.last_batch_process_time = time.time()
-
-    def add_ip_to_group(self, ip, reason, group_name):
-        """添加IP到指定IP组（使用批处理）"""
-        # 检查缓存中是否已添加该IP
+    
+    def add_ip_to_group(self, ip, group_name):
+        """直接将IP添加到指定IP组"""
         cache_key = f"{ip}_{group_name}"
-        if cache_key in self.added_ips_cache:
+        
+        # 获取IP组信息
+        group_info = self._get_ip_group_info(group_name)
+        if not group_info:
+            self.logger.error(f"未找到IP组 '{group_name}'，跳过添加IP")
+            return False
+        
+        group_id = group_info.get('id')
+        current_ips = group_info.get('ips', []).copy()
+        
+        # 检查IP是否已在目标IP组中
+        if ip in current_ips:
+            self.logger.debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
+            # 更新缓存
+            self.added_ips_cache[cache_key] = datetime.now()
             return True
         
-        # 将IP添加到批处理队列
-        self.add_ip_to_batch(ip, reason, group_name)
-        return True
+        # 添加新IP到列表
+        current_ips.append(ip)
+        
+        # 更新IP组
+        return self._update_ip_group(group_id, group_name, current_ips, [ip])
+    
+    def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
+        """更新IP组，添加新IP"""
+        # 使用API更新IP组
+        url = f"https://{self.host}:{self.port}{self.api_prefix}/ipgroup"
+        
+        data = {
+            "id": group_id,
+            "comment": group_name,
+            "reference": "",
+            "ips": current_ips
+        }
+        
+        try:
+            # 确保禁用SSL验证
+            response = self.session.put(url, headers=self.headers, json=data, verify=False)
+            success = response.status_code == 200 and response.json().get('err') is None
+            
+            if success:
+                if len(new_ips) == 1:
+                    self.logger.info(f"成功添加IP {new_ips[0]} 到组 '{group_name}'")
+                else:
+                    self.logger.info(f"成功批量添加 {len(new_ips)} 个IP到组 '{group_name}'")
+                
+                # 更新缓存
+                for ip in new_ips:
+                    cache_key = f"{ip}_{group_name}"
+                    self.added_ips_cache[cache_key] = datetime.now()
+                return True
+            else:
+                if len(new_ips) == 1:
+                    self.logger.error(f"添加IP {new_ips[0]} 到组 '{group_name}' 失败: {response.text}")
+                else:
+                    self.logger.error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
+                return False
+        except Exception as error:
+            if len(new_ips) == 1:
+                self.logger.error(f"添加IP {new_ips[0]} 到组 '{group_name}' 时出错: {str(error)}")
+            else:
+                self.logger.error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
+            return False
     
     def _get_ip_group_info(self, group_name):
         """获取IP组信息，使用缓存减少API请求"""
@@ -255,12 +342,3 @@ class SafeLineAPI:
         
         if expired_keys:
             self.logger.debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
-
-    def get_ip_group_id(self, attack_type_id):
-        """获取需要加入的IP组ID"""
-        # 根据攻击类型获取对应的IP组名称
-        group_name = self.configer.get_ip_group_for_attack_type(attack_type_id)
-        
-        # 获取IP组信息并返回ID
-        group_info = self._get_ip_group_info(group_name)
-        return group_info.get('id') if group_info else None
