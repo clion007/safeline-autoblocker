@@ -207,32 +207,6 @@ class SafeLineAPI:
         self.ip_batch_queue = {}
         self.last_batch_process_time = time.time()
     
-    def add_ip_to_group(self, ip, group_name):
-        """直接将IP添加到指定IP组"""
-        cache_key = f"{ip}_{group_name}"
-        
-        # 获取IP组信息
-        group_info = self._get_ip_group_info(group_name)
-        if not group_info:
-            self.logger.error(f"未找到IP组 '{group_name}'，跳过添加IP")
-            return False
-        
-        group_id = group_info.get('id')
-        current_ips = group_info.get('ips', []).copy()
-        
-        # 检查IP是否已在目标IP组中
-        if ip in current_ips:
-            self.logger.debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
-            # 更新缓存
-            self.added_ips_cache[cache_key] = datetime.now()
-            return True
-        
-        # 添加新IP到列表
-        current_ips.append(ip)
-        
-        # 更新IP组
-        return self._update_ip_group(group_id, group_name, current_ips, [ip])
-    
     def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
         """更新IP组，添加新IP"""
         # 使用API更新IP组

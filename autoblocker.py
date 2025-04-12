@@ -18,110 +18,70 @@ from factory import Factory
 from datetime import datetime, timedelta
 from version import PROGRAM_NAME, get_version_string
 
-def perform_log_maintenance(current_time, last_times, configer, api, logger_instance=None, log_directory=None):
+def perform_log_maintenance(current_time, last_times, configer, api, logger_instance=None):
     """集中处理日志维护任务"""    
-    logger_to_use = logger_instance or Factory.get_logger()
+    logger = logger_instance or Factory.get_logger()
     
     # 检查是否需要清理缓存
     if (current_time - last_times['cache_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL')):
-        logger_to_use.debug("执行缓存清理")
+        logger.debug("执行缓存清理")
         api.clean_cache()
         last_times['cache_clean'] = current_time
     
     # 检查是否需要清理日志
     log_retention_days = int(configer.get_value('LOGS', 'RETENTION_DAYS'))
     if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
-        logger_to_use.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
-        # 修改：使用工厂模式获取日志管理器
+        logger.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
         Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
         last_times['log_clean'] = current_time
     
     return last_times
 
-def process_attack_logs(api, configer, logger_instance=None):
-    """处理攻击日志的通用函数"""
-    logger_to_use = logger_instance or Factory.get_logger()
-    
-    # 获取配置值
-    max_logs = configer.get_value('GENERAL', 'MAX_LOGS_PER_QUERY')
-    attack_types_filter = configer.get_value('GENERAL', 'ATTACK_TYPES_FILTER')
-    
-    # 获取攻击日志
-    logs = api.get_attack_logs(limit=max_logs)
-    
-    if not logs:
-        logger_to_use.debug("没有新的攻击日志")
-        return 0
-    
-    logger_to_use.debug(f"获取到 {len(logs)} 条攻击日志")
-    
-    # 处理每条日志
-    processed_count = 0
-    for log_entry in logs:
-        attack_type = str(log_entry.get('attack_type'))
-        
-        # 检查攻击类型过滤
-        if attack_types_filter and attack_type not in attack_types_filter.split(','):
-            continue
-            
-        # 获取对应的IP组
-        ip_group = api.get_ip_group_for_attack_type(attack_type)
-        if not ip_group:
-            continue
-            
-        # 添加IP到批处理队列
-        ip = log_entry.get('client_ip')
-        reason = f"攻击类型: {attack_type}"
-        if api.add_ip_to_batch(ip, reason, ip_group):
-            processed_count += 1
-    
-    if processed_count > 0:
-        logger_to_use.info(f"处理了 {processed_count} 条攻击日志")
-    
-    return processed_count
-
 def api_monitor(configer=None, logger_instance=None, existing_api=None):
     """API监控函数"""
     configer = configer or Factory.get_configer()
-    if not configer.load():
-        return False
-    
-    logger_to_use = logger_instance or Factory.get_logger()
+    logger = logger_instance or Factory.get_logger()
     
     # 初始化API实例 - 使用工厂模式
     api = existing_api or Factory.get_api_client()
     if not api:
-        logger_to_use.error("无法创建API实例，监控终止")
+        logger.error("无法创建API实例，监控终止")
         return False
     
     # 初始化时间记录
     last_times = {
-        'query': datetime.now() - timedelta(seconds=configer.get_value('GENERAL', 'QUERY_INTERVAL')),
+        'query': datetime.now() - timedelta(seconds=int(configer.get_value('GENERAL', 'QUERY_INTERVAL'))),
         'log_clean': datetime.now(),
         'cache_clean': datetime.now()
     }
     
-    logger_to_use.info("开始API监控模式")
+    logger.info("开始API监控模式")
     
     try:
         while True:
             current_time = datetime.now()
             
             # 检查是否需要查询新日志
-            if (current_time - last_times['query']).total_seconds() > configer.get_value('api', 'query_interval'):
-                process_attack_logs(api, configer, logger_to_use)
+            if (current_time - last_times['query']).total_seconds() > int(configer.get_value('GENERAL', 'QUERY_INTERVAL')):
+                # 直接调用API类中的方法处理攻击日志
+                processed_count = api.process_attack_logs()
+                if processed_count > 0:
+                    logger.info(f"处理了 {processed_count} 条攻击日志")
                 last_times['query'] = current_time
             
             # 每天清理一次旧日志
             if current_time.day != last_times['log_clean'].day:
-                last_times = perform_log_maintenance(current_time, last_times, configer, api, logger_to_use)
+                last_times = perform_log_maintenance(current_time, last_times, configer, api, logger)
             
             time.sleep(1)
     
     except KeyboardInterrupt:
-        logger_to_use.info("收到中断信号，停止监控")
+        logger.info("收到中断信号，正在优雅退出...")
+        # 执行清理工作
+        api.clean_cache()
+        logger.info("监控已停止")
     except Exception as error:
-        logger_to_use.error(f"监控过程中发生错误: {str(error)}")
+        logger.error(f"监控过程中发生错误: {str(error)}")
         return False
     
     return True
@@ -154,101 +114,122 @@ def parse_arguments():
     # 重新加载配置命令
     reload_parser = subparsers.add_parser('reload', help='重新加载配置文件')
     
-    # 添加其他命令行参数
-    parser.add_argument('--list-attack-types', action='store_true', help='获取并显示雷池WAF支持的攻击类型')
-    parser.add_argument('--get-logs', help='获取特定攻击类型的日志，多个ID用逗号分隔')
-    parser.add_argument('--clean-logs', action='store_true', help='立即清理过期日志文件')
-    parser.add_argument('--version', action='version', version=get_version_string())
+    # 版本信息命令
+    version_parser = subparsers.add_parser('version', help='显示版本信息')
     
-    # 添加日志相关参数
-    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                        help='设置日志级别')
+    # 日志命令组
+    log_parser = subparsers.add_parser('log', help='日志相关操作')
+    log_subparsers = log_parser.add_subparsers(dest='log_command', help='日志操作类型')
+    
+    # 设置日志级别
+    log_level_parser = log_subparsers.add_parser('level', help='设置日志级别')
+    log_level_parser.add_argument('value', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help='日志级别')
+    
+    # 设置日志保留天数
+    log_retention_parser = log_subparsers.add_parser('retention', help='设置日志保留天数')
+    log_retention_parser.add_argument('days', type=int, help='保留天数')
+    
+    # 清理日志
+    log_clean_parser = log_subparsers.add_parser('clean', help='清理过期日志文件')
+    
+    # IP组配置命令
+    ip_group_parser = subparsers.add_parser('ip-group', help='IP组相关配置')
+    ip_group_subparsers = ip_group_parser.add_subparsers(dest='ip_group_command', help='IP组操作类型')
+    
+    # 设置高危IP组
+    high_risk_parser = ip_group_subparsers.add_parser('high-risk', help='设置高危IP组名称')
+    high_risk_parser.add_argument('name', help='高危IP组名称')
+    
+    # 设置低危IP组
+    low_risk_parser = ip_group_subparsers.add_parser('low-risk', help='设置低危IP组名称')
+    low_risk_parser.add_argument('name', help='低危IP组名称')
+    
+    # 配置攻击类型与IP组的映射
+    map_parser = ip_group_subparsers.add_parser('map', help='配置攻击类型与IP组的映射')
+    map_parser.add_argument('attack_type', help='攻击类型ID')
+    map_parser.add_argument('risk_level', choices=['high', 'low'], help='风险等级(high/low)')
     
     return parser.parse_args()
 
 def main():
     """主函数"""
-    # 获取配置管理器
+    # 获取配置管理器并加载配置
     configer = Factory.get_configer()
+    if not configer.load():
+        return 1
     
     # 解析命令行参数
     args = parse_arguments()
     
-    # 如果指定了日志级别，更新配置
-    if hasattr(args, 'log_level') and args.log_level:
-        configer.set_value('LOGS', 'LEVEL', args.log_level)
-        # 重置日志管理器，使其重新初始化
-        Factory.reset()
-    
     # 获取日志记录器
     logger = Factory.get_logger()
     
-    # 如果是配置命令，执行配置操作并退出
-    if args.command:
+    # 处理命令
+    if args.command == 'version':
+        print(get_version_string())
+        return 0
+    elif args.command == 'ip-group':
+        if args.ip_group_command == 'high-risk':
+            return handle_config_command(argparse.Namespace(
+                command='set',
+                section='IP_GROUPS',
+                option='HIGH_RISK',
+                value=args.name
+            ), configer, logger)
+        elif args.ip_group_command == 'low-risk':
+            return handle_config_command(argparse.Namespace(
+                command='set',
+                section='IP_GROUPS',
+                option='LOW_RISK',
+                value=args.name
+            ), configer, logger)
+        elif args.ip_group_command == 'map':
+            group_type = 'HIGH_RISK' if args.risk_level == 'high' else 'LOW_RISK'
+            group_name = configer.get_value('IP_GROUPS', group_type)
+            if not group_name:
+                logger.error(f"错误: 未设置{group_type}组名称")
+                return 1
+            return handle_config_command(argparse.Namespace(
+                command='set',
+                section='TYPE_GROUP_MAPPING',
+                option=args.attack_type,
+                value=group_name
+            ), configer, logger)
+        return 0
+    elif args.command == 'log':
+        if args.log_command == 'level':
+            configer.set_log_config('log_level', args.value)
+            Factory.reset()
+            logger.info(f"已设置日志级别为: {args.value}")
+        elif args.log_command == 'retention':
+            configer.set_value('LOGS', 'RETENTION_DAYS', str(args.days))
+            Factory.reset()
+            logger.info(f"已设置日志保留天数为: {args.days} 天")
+        elif args.log_command == 'clean':
+            log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
+            logger.info(f"手动清理日志，保留 {log_retention_days} 天")
+            Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
+        return 0
+    elif args.command in ['view', 'set', 'reset', 'reload']:
         return handle_config_command(args, configer, logger)
     
-    # 清理日志
-    if args.clean_logs:
-        log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
-        logger.info(f"手动清理日志，保留 {log_retention_days} 天")
-        Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
-        return 0
-    
-    # 只在需要API实例时创建
-    api = None
-    if not args.clean_logs:
-        try:
-            api = Factory.get_api_client()
-            if not api:
-                logger.error("无法创建API实例，操作取消")
-                return 1
-        except Exception as error:
-            logger.error(f"无法创建API实例: {str(error)}")
+    # 如果没有指定命令，进入API监控模式
+    try:
+        api = Factory.get_api_client()
+        if not api:
+            logger.error("无法创建API实例，操作取消")
             return 1
-    
-    # 获取攻击类型列表或日志
-    if args.list_attack_types or args.get_logs:
-        if api:
-            if args.list_attack_types:
-                attack_types = configer.get_value('TYPE_GROUP_MAPPING', None)
-                if attack_types:
-                    print("\n雷池WAF支持的攻击类型:")
-                    print("ID | 名称")
-                    print("---|------")
-                    for attack_id, attack_name in attack_types.items():
-                        print(f"{attack_id} | {attack_name}")
-                else:
-                    logger.error("获取攻击类型失败")
-            
-            if args.get_logs:
-                attack_types = args.get_logs.split(',')
-                for attack_type in attack_types:
-                    attack_type = attack_type.strip()
-                    try:
-                        attack_type_int = int(attack_type)
-                        logs = api.get_attack_logs(limit=10, attack_type=attack_type)
-                        if logs:
-                            attack_type_name = api.get_attack_type_name(attack_type_int)  # 使用API实例的方法
-                            print(f"\n攻击类型 {attack_type} ({attack_type_name}) 的最新日志:")
-                            for log in logs:
-                                print(f"IP: {log.get('src_ip')}, 时间: {log.get('time')}, URL: {log.get('website', '')}")
-                        else:
-                            logger.info(f"未找到攻击类型 {attack_type} 的日志")
-                    except ValueError:
-                        logger.error(f"无效的攻击类型ID: {attack_type}，必须是整数")
-        return 0
-    
-    # 默认为API监控模式，直接使用已创建的API实例和日志记录器
-    if api:  # 确保API实例存在
+        
+        # 进入API监控模式
         result = api_monitor(configer, logger, api)
         if not result:
             logger.error("API监控模式异常退出")
             return 1
-    else:
-        logger.error("无法启动API监控模式：API实例未创建")
+        return 0
+        
+    except Exception as error:
+        logger.error(f"无法创建API实例: {str(error)}")
         return 1
-    
-    return 0
 
 def handle_config_command(args, configer, logger=None):
     """处理配置相关命令"""

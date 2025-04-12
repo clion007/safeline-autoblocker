@@ -28,7 +28,7 @@ class LoggerManager:
             config = yaml.safe_load(f)
     
         self._log_dir = config.get('log_dir', 'logs')
-        self._log_file = config.get('log_file', 'app.log')
+        self._log_file = config.get('log_file', 'erro.log')
         logging.config.dictConfig(config)
             
         self._initialized = True
