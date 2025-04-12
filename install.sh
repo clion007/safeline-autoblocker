@@ -406,7 +406,7 @@ create_service() {
     
     cat > "$SERVICE_FILE" << EOF
     [Unit]
-    Description=SafeLine Auto Blocker
+    Description=SafeLine AutoBlocker
     After=network.target
     
     [Service]
