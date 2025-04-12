@@ -12,11 +12,14 @@ SafeLine AutoBlocker
 许可证: MIT
 """
 
+import os
 import sys
 import time
+import atexit
 from factory import Factory
 from datetime import datetime, timedelta
 from version import PROGRAM_NAME, get_version_string
+
 
 def perform_log_maintenance(current_time, last_times, configer, api, logger_instance=None):
     """集中处理日志维护任务"""    
@@ -151,84 +154,126 @@ def parse_arguments():
     
     return parser.parse_args()
 
+def create_pid_file():
+    """创建PID文件"""
+    # Linux下的标准PID文件位置
+    pid_file = '/var/run/safeline-autoblocker.pid'
+    
+    try:
+        # 检查PID文件是否存在
+        if os.path.exists(pid_file):
+            with open(pid_file, 'r') as f:
+                old_pid = f.read().strip()
+            try:
+                # 在Linux下检查进程是否存在
+                os.kill(int(old_pid), 0)
+                raise RuntimeError(f"程序已在运行中 (PID: {old_pid})")
+            except (ProcessLookupError, ValueError):
+                # PID不存在或无效，删除旧的PID文件
+                os.remove(pid_file)
+        
+        # 写入当前进程PID
+        with open(pid_file, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        # 设置适当的权限
+        os.chmod(pid_file, 0o644)
+        
+        # 注册退出时的清理函数
+        atexit.register(lambda: os.remove(pid_file) if os.path.exists(pid_file) else None)
+        
+    except PermissionError:
+        raise RuntimeError("无法创建PID文件，请确保有足够的权限")
+    except (IOError, OSError) as e:
+        raise RuntimeError(f"无法创建或管理PID文件: {str(e)}")
+
 def main():
     """主函数"""
-    # 获取配置管理器并加载配置
-    configer = Factory.get_configer()
-    if not configer.load():
-        return 1
-    
-    # 解析命令行参数
-    args = parse_arguments()
-    
-    # 获取日志记录器
-    logger = Factory.get_logger()
-    
-    # 处理命令
-    if args.command == 'version':
-        print(get_version_string())
-        return 0
-    elif args.command == 'ip-group':
-        if args.ip_group_command == 'high-risk':
-            return handle_config_command(argparse.Namespace(
-                command='set',
-                section='IP_GROUPS',
-                option='HIGH_RISK',
-                value=args.name
-            ), configer, logger)
-        elif args.ip_group_command == 'low-risk':
-            return handle_config_command(argparse.Namespace(
-                command='set',
-                section='IP_GROUPS',
-                option='LOW_RISK',
-                value=args.name
-            ), configer, logger)
-        elif args.ip_group_command == 'map':
-            group_type = 'HIGH_RISK' if args.risk_level == 'high' else 'LOW_RISK'
-            group_name = configer.get_value('IP_GROUPS', group_type)
-            if not group_name:
-                logger.error(f"错误: 未设置{group_type}组名称")
-                return 1
-            return handle_config_command(argparse.Namespace(
-                command='set',
-                section='TYPE_GROUP_MAPPING',
-                option=args.attack_type,
-                value=group_name
-            ), configer, logger)
-        return 0
-    elif args.command == 'log':
-        if args.log_command == 'level':
-            configer.set_log_config('log_level', args.value)
-            Factory.reset()
-            logger.info(f"已设置日志级别为: {args.value}")
-        elif args.log_command == 'retention':
-            configer.set_value('LOGS', 'RETENTION_DAYS', str(args.days))
-            Factory.reset()
-            logger.info(f"已设置日志保留天数为: {args.days} 天")
-        elif args.log_command == 'clean':
-            log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
-            logger.info(f"手动清理日志，保留 {log_retention_days} 天")
-            Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
-        return 0
-    elif args.command in ['view', 'set', 'reset', 'reload']:
-        return handle_config_command(args, configer, logger)
-    
-    # 如果没有指定命令，进入API监控模式
     try:
-        api = Factory.get_api_client()
-        if not api:
-            logger.error("无法创建API实例，操作取消")
+        # 获取配置管理器并加载配置
+        configer = Factory.get_configer()
+        if not configer.load():
             return 1
         
-        # 进入API监控模式
-        result = api_monitor(configer, logger, api)
-        if not result:
-            logger.error("API监控模式异常退出")
-            return 1
-        return 0
+        # 解析命令行参数
+        args = parse_arguments()
         
-    except Exception as error:
-        logger.error(f"无法创建API实例: {str(error)}")
+        # 获取日志记录器
+        logger = Factory.get_logger()
+        
+        # 处理命令
+        if args.command == 'version':
+            print(get_version_string())
+            return 0
+        elif args.command == 'ip-group':
+            if args.ip_group_command == 'high-risk':
+                return handle_config_command(argparse.Namespace(
+                    command='set',
+                    section='IP_GROUPS',
+                    option='HIGH_RISK',
+                    value=args.name
+                ), configer, logger)
+            elif args.ip_group_command == 'low-risk':
+                return handle_config_command(argparse.Namespace(
+                    command='set',
+                    section='IP_GROUPS',
+                    option='LOW_RISK',
+                    value=args.name
+                ), configer, logger)
+            elif args.ip_group_command == 'map':
+                group_type = 'HIGH_RISK' if args.risk_level == 'high' else 'LOW_RISK'
+                group_name = configer.get_value('IP_GROUPS', group_type)
+                if not group_name:
+                    logger.error(f"错误: 未设置{group_type}组名称")
+                    return 1
+                return handle_config_command(argparse.Namespace(
+                    command='set',
+                    section='TYPE_GROUP_MAPPING',
+                    option=args.attack_type,
+                    value=group_name
+                ), configer, logger)
+            return 0
+        elif args.command == 'log':
+            if args.log_command == 'level':
+                configer.set_log_config('log_level', args.value)
+                Factory.reset()
+                logger.info(f"已设置日志级别为: {args.value}")
+            elif args.log_command == 'retention':
+                configer.set_value('LOGS', 'RETENTION_DAYS', str(args.days))
+                Factory.reset()
+                logger.info(f"已设置日志保留天数为: {args.days} 天")
+            elif args.log_command == 'clean':
+                log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
+                logger.info(f"手动清理日志，保留 {log_retention_days} 天")
+                Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
+            return 0
+        elif args.command in ['view', 'set', 'reset', 'reload']:
+            return handle_config_command(args, configer, logger)
+        
+        # 如果没有指定命令，进入API监控模式
+        try:
+            # 创建PID文件（仅在监控模式下）
+            create_pid_file()
+            
+            api = Factory.get_api_client()
+            if not api:
+                logger.error("无法创建API实例，操作取消")
+                return 1
+            
+            # 进入API监控模式
+            result = api_monitor(configer, logger, api)
+            if not result:
+                logger.error("API监控模式异常退出")
+                return 1
+            return 0
+            
+        except RuntimeError as e:
+            logger.error(f"启动监控失败: {str(e)}")
+            return 1
+            
+    except Exception as e:
+        logger = Factory.get_logger()
+        logger.error(f"程序启动失败: {str(e)}")
         return 1
 
 def handle_config_command(args, configer, logger=None):
