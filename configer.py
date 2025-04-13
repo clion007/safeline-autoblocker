@@ -28,8 +28,6 @@ class ConfigManager:
             'QUERY_INTERVAL': '60',
             'MAX_LOGS_PER_QUERY': '100',
             'ATTACK_TYPES_FILTER': '-3',     # 默认过滤黑名单类型
-            'IP_GROUPS_CACHE_TTL': '3600',   # IP组缓存有效期（秒）
-            'MAX_RETRIES': '3'               # API请求最大重试次数
         },
         'MAINTENANCE': {
             'CACHE_CLEAN_INTERVAL': '3600',
@@ -222,7 +220,11 @@ class ConfigManager:
             
             with open(self.TOKEN_FILE, 'w') as token_file:
                 token_file.write(encrypted_token)
-            
+
+            # 重新加载API Token
+            from factory import Factory
+            Factory.get_api_client().reload_token()
+
             return True
             
         except Exception as error:
@@ -232,11 +234,21 @@ class ConfigManager:
 
     def reload(self):
         """重新加载配置"""
-        return self.load()
+        if self._config is not None:
+            self._config.clear()
+        self.load()        
+        logger = self.get_logger()
+        if self._config is not None and self._logger is not None:
+            logger.info('info', '配置已成功重新加载') 
+        from factory import Factory
+        Factory.get_logger_manager().reload()
+        logger = self.get_logger()
+        logger.info('info', '重新加载日志配置成功')
+        
+        return True
     
     def reset(self):
         """重置配置为默认值"""
-        # 实现重置逻辑
         try:
             if os.path.exists(self.CONFIG_FILE):
                 os.remove(self.CONFIG_FILE)
@@ -273,7 +285,7 @@ class ConfigManager:
             
             # 重新加载日志系统
             from factory import Factory
-            Factory.reload_logger()
+            Factory.get_logger_manager().reload()
             
             return True
             

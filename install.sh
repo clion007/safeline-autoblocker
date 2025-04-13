@@ -328,10 +328,6 @@ create_config() {
         return 1
     fi
     
-    # 创建主配置文件
-    local ip_groups_cache_ttl=$(get_user_input "IP组缓存有效期（秒）" "3600" "false")
-    local max_retries=$(get_user_input "API请求最大重试次数" "3" "false")
-    
     # 更新配置文件写入
     cat > "$CONFIG_FILE" << EOF
 [GENERAL]
@@ -352,10 +348,6 @@ MAX_LOGS_PER_QUERY = $max_logs
 
 # 攻击类型过滤（默认过滤黑名单攻击）
 ATTACK_TYPES_FILTER = "-3"
-
-# API配置
-IP_GROUPS_CACHE_TTL = $ip_groups_cache_ttl
-MAX_RETRIES = $max_retries
 
 [MAINTENANCE]
 # 缓存清理间隔(秒)

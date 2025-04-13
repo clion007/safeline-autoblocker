@@ -34,36 +34,9 @@ class Factory:
         return cls._logger_manager.get_logger()
     
     @classmethod
-    def reload_logger(cls):
-        """重新加载日志系统"""
-        if cls._logger_manager is not None:
-            cls._logger_manager = None
-        
-        # 获取新的日志管理器
-        cls.get_logger_manager()
-        logger = cls.get_logger()
-        
-        # 如果API客户端已存在，更新其日志实例
-        if cls._api_client is not None:
-            cls._api_client.logger = logger
-        
-        # 如果配置管理器已存在，更新其日志实例
-        if cls._configer is not None:
-            cls._configer._logger = logger
-        
-        return logger
-    
-    @classmethod
     def get_api_client(cls):
         """获取API客户端实例"""
         if cls._api_client is None:
             from api import SafeLineAPI
             cls._api_client = SafeLineAPI(cls.get_configer(), cls.get_logger())
         return cls._api_client
-    
-    @classmethod
-    def reset(cls):
-        """重置所有服务实例"""
-        cls._configer = None
-        cls._logger_manager = None
-        cls._api_client = None

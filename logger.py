@@ -28,7 +28,7 @@ class LoggerManager:
         # 加载日志配置
         try:
             with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                self._config = yaml.safe_load(f).copy()
+                self._config = yaml.safe_load(f)
         except Exception as e:
             print(f"加载日志配置失败: {e}，使用默认配置")
             self._config = {
@@ -42,79 +42,88 @@ class LoggerManager:
             }
             
         # 确保日志目录存在（使用绝对路径）
-        log_dir = os.path.join(self.BASE_DIR, self._config['log_dir'])
+        log_dir = self.get_config('log_dir')
         os.makedirs(log_dir, exist_ok=True)
-            
-        # 配置日志系统（使用绝对路径）
-        log_file = os.path.join(self.BASE_DIR, self._config['log_dir'], self._config['log_file'])
-        
-        # 创建独立的日志记录器
-        self._logger = logging.getLogger('autoblocker')
-        self._logger.setLevel(getattr(logging, self._config['log_level']))
-
-        # 创建格式化器
-        log_formatter = logging.Formatter(self._config['log_format'])
-        
-        # 创建处理器
-        handler = logging.handlers.RotatingFileHandler(
-            filename=log_file,
-            formatter=log_formatter,
-            maxBytes=self._config['max_size'],
-            backupCount=self._config['backup_count'],
-            encoding='utf-8'
-        )
-        
-        # 添加处理器到日志记录器
-        self._logger.addHandler(handler)
 
         self._initialized = True
     
     def get_config(self, key):
-        """获取日志配置项
-        
-        Args:
-            key: 配置项名称
-            default: 默认值
-            
-        Returns:
-            配置项的值
-        """
-        return self._config.get(key, default)
+        """获取日志配置项"""
+        if key == 'log_dir' :
+            return os.path.join(self.BASE_DIR, self._config['log_dir'])
+        elif key == 'log_file' :
+            return os.path.join(self.BASE_DIR, self._config['log_dir'], self._config['log_file'])
+        else:
+            return self._config.get(key)
     
     def get_logger(self):
         """获取日志记录器，如果不存在则创建"""
         if self._logger is None:
+            # 创建独立的日志记录器
             self._logger = logging.getLogger('autoblocker')
-        return self._logger
-    
-    def clean_old_logs(self):
-        """清理旧日志文件
-        
-        Args:
-            retention_days: 日志保留天数
-        """
-        log_dir = self.get_config('log_dir')
-        log_file = self.get_config('log_file')
-        retention_days = self.get_config('retention_days')
-        if retention_days is not None:
-            retention_days = int(retention_days)
-        
-        if not log_dir or not log_file:
-            return
             
+            # 避免重复添加handlers
+            if not self._logger.handlers:
+                # 配置日志系统
+                log_file = self.get_config('log_file')
+                self._logger.setLevel(getattr(logging, self.get_config('log_level').upper()))
+
+                # 创建格式化器和处理器
+                log_formatter = logging.Formatter(self.get_config('log_format'))
+                handler = logging.handlers.RotatingFileHandler(
+                    filename=log_file,
+                    formatter=log_formatter,
+                    maxBytes=self.get_config('max_size'),
+                    backupCount=self.get_config('backup_count'),
+                    encoding='utf-8'
+                )
+                self._logger.addHandler(handler)
+            
+        return self._logger
+
+    def clean_old_logs(self):
+        """清理旧日志文件"""
         try:
+            retention_days = int(self.get_config('retention_days'))
+            if retention_days <= 0:
+                return
+                
+            log_dir = self.get_config('log_dir')
+            log_file = self.get_config('log_file')
+            
             # 计算截止日期
             cutoff_date = datetime.now() - timedelta(days=retention_days)
             
+            # 获取日志文件名（不含路径）用于构建通配符模式
+            log_file_name = os.path.basename(log_file)
+            
             # 查找所有日志文件
-            log_pattern = os.path.join(log_dir, f"{os.path.splitext(log_file)[0]}*.*")
+            log_pattern = os.path.join(log_dir, f"{os.path.splitext(log_file_name)[0]}*.*")
             log_files = glob.glob(log_pattern)
             
             # 删除过期日志
+            deleted_count = 0
             for log_file in log_files:
                 if datetime.fromtimestamp(os.path.getmtime(log_file)) < cutoff_date:
                     os.remove(log_file)
+                    deleted_count += 1
+            
+            if deleted_count > 0:
+                self._logger.debug(f"已清理 {deleted_count} 个过期日志文件")
                 
         except Exception as error:
-            logger = self.get_logger()
-            logger.error(f"清理日志文件失败: {error}")
+            self._logger.error(f"清理日志文件失败: {error}")
+
+    def reload(self):
+        """重新加载日志配置"""
+        # 清理现有logger
+        if self._logger:
+            for handler in self._logger.handlers[:]:
+                self._logger.removeHandler(handler)
+            self._logger = None
+        
+        # 重新初始化
+        self.__init__()
+        
+        # 重新获取日志记录器
+        return self.get_logger()

@@ -75,8 +75,6 @@ sudo python3 /tmp/install.sh
 | QUERY_INTERVAL | API查询间隔（秒） | 60 |
 | MAX_LOGS_PER_QUERY | 每次查询的最大日志数量 | 100 |
 | ATTACK_TYPES_FILTER | 攻击类型过滤，多个ID用逗号分隔 | -3 (默认过滤黑名单类型) |
-| IP_GROUPS_CACHE_TTL | IP组缓存有效期（秒） | 3600 |
-| MAX_RETRIES | API请求最大重试次数 | 3 |
 | CACHE_CLEAN_INTERVAL | 缓存清理间隔（秒） | 3600 |
 | LOG_CLEAN_INTERVAL | 日志清理间隔（秒） | 86400 |
 
