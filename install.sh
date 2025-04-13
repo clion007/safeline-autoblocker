@@ -493,9 +493,7 @@ start_service() {
     
     echo -e "${RED}服务启动失败，请检查日志获取详细信息${NC}"
     echo "可使用以下命令查看详细错误信息:"
-    echo "1. systemctl status safeline-autoblocker"
-    echo "2. journalctl -u safeline-autoblocker -n 50"
-    echo "3. 查看Python错误日志: cat $INSTALL_DIR/logs/error.log"
+    echo "journalctl -u safeline-autoblocker -n 50"
     return 1
 }
 
