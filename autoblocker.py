@@ -7,8 +7,8 @@ SafeLine AutoBlocker
 自动监控雷池WAF攻击日志并封禁攻击IP。
 
 作者: Clion Nieh
-版本: 1.2.0
-日期: 2025.4.6
+版本: 1.3.0
+日期: 2025.4.13
 许可证: MIT
 """
 

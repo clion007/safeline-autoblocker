@@ -1,14 +1,25 @@
 # SafeLine AutoBlocker
 
+SafeLine AutoBlocker是一个用于自动识别和封禁恶意IP的Python脚本工具。它通过API监控雷池WAF的安全日志，识别扫描器和攻击行为，并将相应的IP自动添加到不同的IP组（如黑名单或人机验证，可以安装时设置）。
+
 ## 功能特点
 
 - 通过API实时监控雷池WAF安全日志
-- 自动识别扫描器和攻击行为
-- 根据攻击类型将IP自动添加到不同的IP组（黑名单或人机验证）
-- 支持自定义IP组配置
+- 自动识别不同的攻击行为
+- 支持高危/低危IP分组处理
+- 根据攻击类型将IP自动添加到不同的IP组进行拦截
+- 支持自定义IP组名称及通过命令行修改
+- 支持批量处理IP，提高效率
 - 提供完整的安装和卸载脚本
-- 支持按攻击类型ID筛选IP
-- 支持直接从雷池API获取特定攻击类型的日志
+- 提供完整的故障排除文档
+- 提供完整的配置文件说明
+- 支持安装失败自动回滚
+- 自动清理过期日志和缓存
+- 完整的日志记录和错误处理
+- 支持命令行配置管理
+- 支持日志保留时间设置
+- 支持日志级别设置
+- 优化的进程管理，防止重复运行
 
 ## 系统要求
 
@@ -22,7 +33,7 @@
 
 ### 快速安装
 
-使用以下命令一键安装：
+使用以下命令安装：
 
 ```bash
 wget -O - https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install.sh | sudo bash
@@ -52,59 +63,54 @@ sudo python3 /tmp/install-autoblocker.py
 
 ## 配置文件说明
 
-配置文件位于 `/etc/safeline/safeline-autoblocker.conf`，主要配置项包括：
+配置文件位于 `/etc/safeline/setting.conf`，主要配置项包括：
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | SAFELINE_HOST | 雷池API主机地址 | localhost |
 | SAFELINE_PORT | 雷池API端口 | 9443 |
-| SAFELINE_TOKEN_ENCRYPTED | 加密后的API令牌 | (安装时设置) |
-| DEFAULT_IP_GROUP | 默认IP组名称 | 人机验证 |
-| USE_TYPE_GROUPS | 是否为不同攻击类型使用不同IP组 | true |
-| ATTACK_TYPES_FILTER | 攻击类型过滤，多个ID用逗号分隔 | (空，监控所有类型) |
+| API_PREFIX | API前缀 | /api/open |
+| HIGH_RISK_IP_GROUP | 高危IP组名称 | 黑名单 |
+| LOW_RISK_IP_GROUP | 低危IP组名称 | 人机验证 |
 | QUERY_INTERVAL | API查询间隔（秒） | 60 |
 | MAX_LOGS_PER_QUERY | 每次查询的最大日志数量 | 100 |
-| DEBUG_MODE | 是否启用调试模式 | false |
-| LOG_RETENTION_DAYS | 日志保留天数（0表示永久保留） | 30 |
+| ATTACK_TYPES_FILTER | 攻击类型过滤，多个ID用逗号分隔 | -3 (默认过滤黑名单类型) |
+| IP_GROUPS_CACHE_TTL | IP组缓存有效期（秒） | 3600 |
+| MAX_RETRIES | API请求最大重试次数 | 3 |
+| CACHE_CLEAN_INTERVAL | 缓存清理间隔（秒） | 3600 |
+| LOG_CLEAN_INTERVAL | 日志清理间隔（秒） | 86400 |
 
-配置文件还包含 `[TYPE_GROUP_MAPPING]` 部分，用于配置不同攻击类型ID对应的IP组：
+配置文件还包含 `[TYPE_GROUP_MAPPING]` 部分，用于配置不同攻击类型ID对应的IP组。
 
-```ini
-[TYPE_GROUP_MAPPING]
-# 攻击类型ID到IP组的映射
-# 格式: 攻击类型ID = IP组名称
-# 高危攻击类型加入黑名单组
-0 = 黑名单
-5 = 黑名单
-7 = 黑名单
-8 = 黑名单
-9 = 黑名单
-11 = 黑名单
-29 = 黑名单
+日志配置文件位于 `/etc/safeline/log.yaml`，主要配置项包括：
 
-# 低危攻击类型加入人机验证组
-1 = 人机验证
-2 = 人机验证
-3 = 人机验证
-4 = 人机验证
-6 = 人机验证
-10 = 人机验证
-21 = 人机验证
-```
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| LOG_LEVEL | 日志级别 | INFO |
+| LOG_RETENTION_DAYS | 日志保留天数 | 30 |
+| LOG_FILE | 日志文件路径 | error.log |
+| LOG_DIR | 日志目录路径 | logs |
+| LOG_FORMAT | 日志格式 | %(asctime)s - %(levelname)s - %(message)s |
+| LOG_SIZE | 日志文件大小限制（字节） | 10485760 |
+| LOG_BACKUP_COUNT | 日志文件备份数量 | 5 |
 
 ## 命令行参数
 
-SafeLine Auto Blocker 支持以下命令行参数：
+SafeLine AutoBlocker 支持以下命令行参数：
 
-| 参数 | 说明 | 示例 |
+| 命令 | 说明 | 示例 |
 |------|------|------|
-| --list-attack-types | 获取并显示雷池WAF支持的攻击类型 | `python3 safeline-autoblocker.py --list-attack-types` |
-| --get-logs | 获取特定攻击类型的日志 | `python3 safeline-autoblocker.py --get-logs 0,7,21` |
-| --clean-logs | 立即清理过期日志文件 | `python3 safeline-autoblocker.py --clean-logs` |
-| --version | 显示版本信息 | `python3 safeline-autoblocker.py --version` |
-| --help | 显示帮助信息 | `python3 safeline-autoblocker.py --help` |
-
-# SafeLine AutoBlocker
+| view | 查看当前配置 | `python3 autoblocker.py view` |
+| set | 设置配置选项 | `python3 autoblocker.py set SECTION OPTION VALUE` |
+| reset | 重置为默认配置 | `python3 autoblocker.py reset --confirm` |
+| reload | 重新加载配置文件 | `python3 autoblocker.py reload` |
+| version | 显示版本信息 | `python3 autoblocker.py version` |
+| log level | 设置日志级别 | `python3 autoblocker.py log level INFO` |
+| log retention | 设置日志保留天数 | `python3 autoblocker.py log retention 30` |
+| log clean | 清理过期日志文件 | `python3 autoblocker.py log clean` |
+| ip-group high-risk | 设置高危IP组名称 | `python3 autoblocker.py ip-group high-risk 黑名单` |
+| ip-group low-risk | 设置低危IP组名称 | `python3 autoblocker.py ip-group low-risk 人机验证` |
+| ip-group map | 配置攻击类型与IP组的映射 | `python3 autoblocker.py ip-group map 0 high` |
 
 ## 使用方法
 
@@ -131,7 +137,7 @@ sudo journalctl -u safeline-autoblocker -f
 ### 手动运行
 
 ```bash
-sudo python3 /opt/safeline/scripts/safeline-autoblocker.py
+sudo python3 /opt/safeline/scripts/autoblocker.py
 ```
 
 ## 攻击类型参考
@@ -162,7 +168,7 @@ sudo python3 /opt/safeline/scripts/safeline-autoblocker.py
 运行卸载脚本：
 
 ```bash
-sudo python3 /opt/safeline/scripts/uninstall-autoblocker.py
+sudo python3 /opt/safeline/scripts/uninstall.sh
 ```
 
 ### 手动卸载
@@ -198,12 +204,6 @@ sudo rm -rf /etc/safeline
 sudo rm -rf /opt/safeline
 ```
 
-6. 删除日志文件：
-
-```bash
-sudo rm -rf /var/log/safeline
-```
-
 ## 故障排除
 
 1. 服务无法启动
@@ -225,19 +225,28 @@ sudo rm -rf /var/log/safeline
 - 确认网络连接正常
 - 检查防火墙设置
 
+4. 程序重复运行问题
+
+- 检查PID文件是否存在：`ls -l /var/run/safeline-autoblocker.pid`
+- 如果PID文件存在但程序未运行，可以手动删除：`sudo rm /var/run/safeline-autoblocker.pid`
+
 ## 常见问题
 
 1. **如何获取雷池API令牌？**
    
-登录雷池WAF管理界面，进入"系统设置" -> "API管理"，创建并复制API令牌。
+登录雷池WAF管理界面，进入"系统设置" -> "API Token"，创建并复制API令牌。
 
 2. **如何查看已封禁的IP？**
    
-登录雷池WAF管理界面，进入"安全防护" -> "IP管理"，查看相应的IP组。
+登录雷池WAF管理界面，进入"防护配置" -> "通用配置" -> "IP组"，查看相应的IP组。
 
 3. **如何修改默认IP组名称？**
    
-编辑配置文件 `/etc/safeline/safeline-autoblocker.conf`，修改 `DEFAULT_IP_GROUP` 参数，然后重启服务。
+使用命令行工具修改：
+```bash
+sudo python3 /opt/safeline/scripts/autoblocker.py ip-group high-risk "黑名单"
+sudo python3 /opt/safeline/scripts/autoblocker.py ip-group low-risk "人机验证"
+```
 
 4. **如何只监控特定类型的攻击？**
    
@@ -245,7 +254,10 @@ sudo rm -rf /var/log/safeline
 
 5. **如何增加日志查询频率？**
    
-编辑配置文件，减小 `QUERY_INTERVAL` 参数的值（单位为秒）。
+使用命令行工具修改：
+```bash
+sudo python3 /opt/safeline/scripts/autoblocker.py set GENERAL QUERY_INTERVAL 30
+```
 
 6. **如何在雷池WAF中创建IP组？**
    
@@ -253,33 +265,48 @@ sudo rm -rf /var/log/safeline
 
 7. **如何查看程序的运行日志？**
    
-程序的日志保存在 `/var/log/safeline/auto_blocker.log` 文件中，可以使用以下命令查看：
+程序的日志保存在 `/opt/safeline/scripts/logs/error.log` 文件中，可以使用以下命令查看：
 ```bash
-sudo tail -f /var/log/safeline/auto_blocker.log
+sudo tail -f /opt/safeline/scripts/logs/error.log
 ```
 
 8. **如何设置日志保留周期？**
    
-编辑配置文件 `/etc/safeline/safeline-autoblocker.conf`，修改 `LOG_RETENTION_DAYS` 参数的值（单位为天）。设置为0表示永久保留日志。
+使用命令行工具修改：
+```bash
+sudo python3 /opt/safeline/scripts/autoblocker.py log retention 30
+```
 
 9. **如何手动清理过期日志？**
    
 可以使用以下命令手动触发日志清理：
 ```bash
-sudo python3 /opt/safeline/scripts/safeline-autoblocker.py --clean-logs
+sudo python3 /opt/safeline/scripts/autoblocker.py log clean
+```
+
+10. **如何确认程序是否正在运行？**
+    
+可以使用以下命令检查程序状态：
+```bash
+sudo systemctl status safeline-autoblocker
+```
+或者检查PID文件：
+```bash
+cat /var/run/safeline-autoblocker.pid
 ```
 
 ## 更新日志
 
-### v1.0.0 (2025-04-02)
-- 初始版本发布
-- 支持API监控和日志文件监控
-- 支持按攻击类型分配IP到不同IP组
-
-### v1.1.0 (2025-04-04)
-- 添加攻击类型过滤功能
-- 优化日志记录
+### v1.3.0 (2025-04-13)
 - 修复已知问题
+- 优化PID文件管理，防止程序重复运行
+- 改进Linux系统兼容性
+- 增强错误处理和日志记录
+- 优化资源清理机制
+- 优化IP处理逻辑，提高了对攻击的实时响应能力
+- 更新配置文件说明，添加CACHE_CLEAN_INTERVAL和LOG_CLEAN_INTERVAL配置项
+- 完善故障排除文档，添加程序重复运行问题的解决方案
+- 扩展常见问题解答，增加程序运行状态检查方法
 
 ### v1.2.0 (2025-04-06)
 - 移除日志文件监控功能
@@ -288,6 +315,16 @@ sudo python3 /opt/safeline/scripts/safeline-autoblocker.py --clean-logs
 - 添加日志保留时间设置，过期自动删除
 - 移除了--api-monitor和--daemon参数，默认以API监控模式运行
 - 改进错误处理，提高程序稳定性
+
+### v1.1.0 (2025-04-04)
+- 添加攻击类型过滤功能
+- 优化日志记录
+- 修复已知问题
+
+### v1.0.0 (2025-04-02)
+- 初始版本发布
+- 支持API监控和日志文件监控
+- 支持按攻击类型分配IP到不同IP组
 
 ## 许可证
 
@@ -300,4 +337,3 @@ Clion Nieh - EMAIL: <clion007@126.com>
 ## 鸣谢
 
 - 雷池WAF团队提供的API支持
-- 咖啡星人k博客文章提供的指导和帮助

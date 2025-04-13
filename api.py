@@ -28,8 +28,6 @@ class SafeLineAPI:
         
         # 设置参数
         self.cache_expiry = int(configer.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
-        self.ip_batch_size = int(configer.get_value('GENERAL', 'IP_BATCH_SIZE'))
-        self.ip_batch_interval = int(configer.get_value('GENERAL', 'IP_BATCH_INTERVAL'))
         self.ip_groups_cache_ttl = int(configer.get_value('GENERAL', 'IP_GROUPS_CACHE_TTL'))
         
         self.session = requests.Session()
@@ -159,17 +157,15 @@ class SafeLineAPI:
             'ip': ip
         })
         
-        # 检查是否需要处理批量队列
-        current_time = time.time()
-        if (current_time - self.last_batch_process_time > self.ip_batch_interval) or sum(len(ips) for ips in self.ip_batch_queue.values()) >= self.ip_batch_size:
-            self.process_ip_batch()
+        # 执行添加IP
+        self.process_ip_batch()
 
     def process_ip_batch(self):
         """处理IP批处理队列"""
         if not self.ip_batch_queue:
             return
         
-        self.logger.debug(f"开始批量处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
+        self.logger.debug(f"开始处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
         
         for group_name, ip_list in self.ip_batch_queue.items():
             if not ip_list:

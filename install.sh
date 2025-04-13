@@ -214,11 +214,9 @@ download_files() {
             echo -e "${RED}下载失败: $file${NC}"
             return 1
         fi
+        # 设置执行权限
+        chmod 755 "$destination"
     done
-    
-    # 设置执行权限
-    chmod 755 "$INSTALL_DIR/$MAIN_SCRIPT"
-    chmod 755 "$INSTALL_DIR/$UNINSTALL_SCRIPT"
     
     # 下载配置示例
     echo "正在下载: $CONFIG_EXAMPLE"
@@ -331,8 +329,6 @@ create_config() {
     fi
     
     # 创建主配置文件
-    local ip_batch_size=$(get_user_input "批量处理IP数量" "50" "false")
-    local ip_batch_interval=$(get_user_input "批量处理间隔（秒）" "300" "false")
     local ip_groups_cache_ttl=$(get_user_input "IP组缓存有效期（秒）" "3600" "false")
     local max_retries=$(get_user_input "API请求最大重试次数" "3" "false")
     
@@ -357,9 +353,7 @@ create_config() {
     # 攻击类型过滤（默认过滤黑名单攻击）
     ATTACK_TYPES_FILTER = "-3"
     
-    # API批量处理配置
-    IP_BATCH_SIZE = $ip_batch_size
-    IP_BATCH_INTERVAL = $ip_batch_interval
+    # API配置
     IP_GROUPS_CACHE_TTL = $ip_groups_cache_ttl
     MAX_RETRIES = $max_retries
     
