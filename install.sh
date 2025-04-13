@@ -18,7 +18,6 @@ CONFIG_DIR="/etc/safeline"
 CONFIG_FILE="$CONFIG_DIR/setting.conf"
 KEY_FILE="$CONFIG_DIR/token.key"
 TOKEN_FILE="$CONFIG_DIR/token.enc"
-CONFIG_EXAMPLE="$CONFIG_DIR/setting.conf.example"
 MAIN_SCRIPT="autoblocker.py"
 UNINSTALL_SCRIPT="uninstall.sh"
 INSTALL_DIR="/opt/safeline/scripts"
@@ -186,7 +185,9 @@ download_files() {
     # 定义需要下载的文件列表
     local script_files=(
         "api.py"
+        "LICENSE"
         "logger.py"
+        "README.md"
         "version.py"
         "factory.py"
         "configer.py"
@@ -217,22 +218,6 @@ download_files() {
         # 设置执行权限
         chmod 755 "$destination"
     done
-    
-    # 下载配置示例
-    echo "正在下载: $CONFIG_EXAMPLE"
-    if command -v curl &> /dev/null; then
-        curl --fail --silent --location --connect-timeout 15 --retry 3 --output "$CONFIG_EXAMPLE" "$REPO_URL/$CONFIG_EXAMPLE"
-    elif command -v wget &> /dev/null; then
-        wget --quiet --tries=3 --timeout=15 --output-document="$CONFIG_EXAMPLE" "$REPO_URL/$CONFIG_EXAMPLE"
-    else
-        echo -e "${RED}错误: 系统中未找到curl或wget${NC}"
-        return 1
-    fi
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}下载配置示例文件失败，安装中止${NC}"
-        return 1
-    fi
     
     echo -e "${GREEN}所有文件下载完成${NC}"
     return 0
