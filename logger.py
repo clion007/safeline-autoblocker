@@ -15,6 +15,7 @@ class LoggerManager:
     # 定义日志配置文件路径常量
     CONFIG_DIR = "/etc/safeline"
     LOG_CONFIG_FILE = f"{CONFIG_DIR}/log.yaml"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
     def __init__(self):
         """初始化方法 - 加载日志配置"""
@@ -23,9 +24,6 @@ class LoggerManager:
             
         self._logger = None
         self._config = {}
-        
-        # 获取脚本所在目录
-        self._base_dir = os.path.dirname(os.path.abspath(__file__))
 
         # 加载日志配置
         try:
@@ -44,11 +42,11 @@ class LoggerManager:
             }
             
         # 确保日志目录存在（使用绝对路径）
-        log_dir = os.path.join(self._base_dir, self._config['log_dir'])
+        log_dir = os.path.join(self.BASE_DIR, self._config['log_dir'])
         os.makedirs(log_dir, exist_ok=True)
             
         # 配置日志系统（使用绝对路径）
-        log_file = os.path.join(self._base_dir, self._config['log_dir'], self._config['log_file'])
+        log_file = os.path.join(self.BASE_DIR, self._config['log_dir'], self._config['log_file'])
         
         # 创建独立的日志记录器
         self._logger = logging.getLogger('autoblocker')
