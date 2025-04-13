@@ -174,61 +174,44 @@ class ConfigManager:
             return False
 
     def get_token(self):
-        logger = self.get_logger()
+        """获取API令牌"""
         try:
-            # 直接使用类常量
-            if not os.path.exists(self.TOKEN_FILE):
-                logger.error(f"令牌文件不存在: {self.TOKEN_FILE}")
-                return None
+            # 读取密钥
+            with open(self.KEY_FILE, 'r') as f:
+                key = f.read().strip()
             
-            with open(self.TOKEN_FILE, 'r') as token_file:
-                encrypted_token = token_file.read().strip()
+            # 读取加密的令牌
+            with open(self.TOKEN_FILE, 'r') as f:
+                encrypted_token = f.read().strip()
             
-            # 从密钥文件读取密钥
-            if not os.path.exists(self.KEY_FILE):
-                logger.error(f"密钥文件不存在: {self.KEY_FILE}")
-                return None
-            
-            with open(self.KEY_FILE, 'r') as key_file:
-                key = key_file.read().strip()
-            
-            # 解密令牌
+            # 解密令牌（与安装脚本保持一致）
             from cryptography.fernet import Fernet
-            fernet = Fernet(key.encode())
-            decrypted_token = fernet.decrypt(encrypted_token.encode()).decode()
-            
-            # 检查令牌是否有效
-            if not decrypted_token:
-                logger.error("无法获取有效的API令牌")
-                raise ValueError("无效的API令牌")
-            
-            return decrypted_token
-            
-        except Exception as error:
-            logger.error(f"解密令牌失败: {error}")
+            f = Fernet(key.encode())
+            token = f.decrypt(encrypted_token.encode()).decode()
+            return token
+        except Exception as e:
+            self.get_logger().error(f"获取API令牌失败: {str(e)}")
             return None
 
     def update_token(self, new_token):
+        """更新API令牌"""
         try:
-            with open(self.KEY_FILE, 'r') as key_file:
-                key = key_file.read().strip()
+            # 读取密钥
+            with open(self.KEY_FILE, 'r') as f:
+                key = f.read().strip()
             
+            # 加密新令牌（与安装脚本保持一致）
             from cryptography.fernet import Fernet
-            fernet = Fernet(key.encode())
-            encrypted_token = fernet.encrypt(new_token.encode()).decode()
+            f = Fernet(key.encode())
+            encrypted_token = f.encrypt(new_token.encode()).decode()
             
-            with open(self.TOKEN_FILE, 'w') as token_file:
-                token_file.write(encrypted_token)
-
-            # 重新加载API Token
-            from factory import Factory
-            Factory.get_api_client().reload_token()
-
+            # 保存加密的令牌
+            with open(self.TOKEN_FILE, 'w') as f:
+                f.write(encrypted_token)
+            
             return True
-            
-        except Exception as error:
-            logger = self.get_logger()
-            logger.error(f"更新令牌失败: {error}")
+        except Exception as e:
+            self.get_logger().error(f"更新API令牌失败: {str(e)}")
             return False
 
     def reload(self):

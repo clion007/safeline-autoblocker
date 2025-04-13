@@ -398,6 +398,11 @@ EOF
 create_service() {
     print_step 4 6 "创建系统服务"
     
+    # 预先创建日志目录并设置权限
+    mkdir -p "$INSTALL_DIR/logs"
+    chown -R root:root "$INSTALL_DIR"
+    chmod -R 755 "$INSTALL_DIR"
+    
     cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=SafeLine AutoBlocker
@@ -410,25 +415,21 @@ Type=simple
 User=root
 Group=root
 
-# 1. 首先设置工作目录和环境变量
+# 设置工作目录和环境变量
 WorkingDirectory=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$INSTALL_DIR
 Environment=CONFIG_DIR=$CONFIG_DIR
 
-# 2. 然后创建必要的目录和设置权限
-ExecStartPre=/bin/mkdir -p $INSTALL_DIR/logs
-ExecStartPre=/bin/chown -R root:root $INSTALL_DIR
-ExecStartPre=/bin/chmod -R 755 $INSTALL_DIR
-
-# 3. 设置日志输出（依赖于日志目录已创建）
+# 设置日志输出
 StandardOutput=append:$INSTALL_DIR/logs/info.log
 StandardError=append:$INSTALL_DIR/logs/error.log
 
-# 4. 设置PID文件（在启动进程前）
-PIDFile=/var/run/safeline-autoblocker.pid
+# 设置PID文件
+RuntimeDirectory=safeline
+PIDFile=/run/safeline/safeline-autoblocker.pid
 
-# 5. 最后启动主程序
+# 启动主程序
 ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
 Restart=on-failure
 RestartSec=30
