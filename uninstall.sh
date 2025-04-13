@@ -98,34 +98,17 @@ remove_config() {
     fi
 }
 
-# 删除脚本文件
-remove_scripts() {
-    script_files=(
-        "$INSTALL_DIR/api.py"
-        "$INSTALL_DIR/LICENSE"
-        "$INSTALL_DIR/README.md"
-        "$INSTALL_DIR/logger.py"
-        "$INSTALL_DIR/version.py"
-        "$INSTALL_DIR/configer.py"
-        "$INSTALL_DIR/factory.py"
-        "$INSTALL_DIR/autoblocker.py"
-    )
-    
-    for file in "${script_files[@]}"; do
-        if [ -f "$file" ]; then
-            rm -f "$file" && echo "删除脚本文件: $file" || echo "删除脚本文件失败: $file"
-        fi
-    done
-}
-
 # 执行卸载步骤
 stop_service
 service_removed=true
 remove_service_file || service_removed=false
 config_removed=true
 remove_config || config_removed=false
-script_removed=true
-remove_scripts || script_removed=false
+
+# 删除安装目录下的所有文件
+if [ -d "$INSTALL_DIR" ]; then
+    rm -rf "${INSTALL_DIR:?}"/* 2>/dev/null && script_removed=true || script_removed=false
+fi
 
 # 卸载结果反馈
 echo -e "\n卸载结果:"
@@ -145,8 +128,6 @@ PARENT_DIR=$(dirname "$INSTALL_DIR")
 # 删除安装目录及卸载脚本自身
 if [ -d "$INSTALL_DIR" ]; then
     echo "删除安装目录: $INSTALL_DIR"
-    # 先删除安装目录下的其他文件
-    rm -rf "${INSTALL_DIR:?}"/* 2>/dev/null
     
     # 如果父目录为空，准备删除
     if [ -d "$PARENT_DIR" ] && [ "$(ls -A "$PARENT_DIR" 2>/dev/null | grep -v "$(basename "$0")")" = "" ]; then
