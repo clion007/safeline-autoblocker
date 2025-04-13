@@ -383,15 +383,36 @@ create_service() {
 [Unit]
 Description=SafeLine AutoBlocker
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
 User=root
+Group=root
+
+# 1. 首先设置工作目录和环境变量
 WorkingDirectory=$INSTALL_DIR
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=$INSTALL_DIR
+Environment=CONFIG_DIR=$CONFIG_DIR
+
+# 2. 然后创建必要的目录和设置权限
+ExecStartPre=/bin/mkdir -p $INSTALL_DIR/logs
+ExecStartPre=/bin/chown -R root:root $INSTALL_DIR
+ExecStartPre=/bin/chmod -R 755 $INSTALL_DIR
+
+# 3. 设置日志输出（依赖于日志目录已创建）
+StandardOutput=append:$INSTALL_DIR/logs/info.log
+StandardError=append:$INSTALL_DIR/logs/error.log
+
+# 4. 设置PID文件（在启动进程前）
 PIDFile=/var/run/safeline-autoblocker.pid
+
+# 5. 最后启动主程序
 ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
@@ -417,17 +438,41 @@ EOF
 start_service() {
     print_step 5 6 "启动服务"
     
-    systemctl start safeline-autoblocker
-    
-    # 检查服务状态
-    if systemctl is-active --quiet safeline-autoblocker; then
-        echo -e "${GREEN}服务启动成功${NC}"
-        return 0
-    else
-        echo -e "${RED}服务启动失败，请检查日志获取详细信息${NC}"
-        echo "可使用命令: journalctl -u safeline-autoblocker -n 50"
+    # 验证Python脚本
+    if ! python3 -m py_compile "$INSTALL_DIR/$MAIN_SCRIPT"; then
+        echo -e "${RED}Python脚本语法检查失败${NC}"
         return 1
     fi
+    
+    # 验证配置文件
+    if ! python3 -c "import yaml; yaml.safe_load(open('$CONFIG_DIR/log.yaml'))"; then
+        echo -e "${RED}日志配置文件格式错误${NC}"
+        return 1
+    fi
+    
+    # 验证权限
+    if [ ! -r "$CONFIG_FILE" ] || [ ! -r "$KEY_FILE" ] || [ ! -r "$TOKEN_FILE" ]; then
+        echo -e "${RED}配置文件权限错误${NC}"
+        return 1
+    fi
+    
+    systemctl start safeline-autoblocker
+    
+    # 等待服务启动并多次检查状态
+    for i in {1..5}; do
+        sleep 2
+        if systemctl is-active --quiet safeline-autoblocker; then
+            echo -e "${GREEN}服务启动成功${NC}"
+            return 0
+        fi
+    done
+    
+    echo -e "${RED}服务启动失败，请检查日志获取详细信息${NC}"
+    echo "可使用以下命令查看详细错误信息:"
+    echo "1. systemctl status safeline-autoblocker"
+    echo "2. journalctl -u safeline-autoblocker -n 50"
+    echo "3. 查看Python错误日志: cat $INSTALL_DIR/logs/error.log"
+    return 1
 }
 
 # 清理文件（回滚操作）
