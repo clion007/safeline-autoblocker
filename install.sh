@@ -175,8 +175,13 @@ download_files() {
 
 # 生成加密密钥
 generate_key() {
-    # 使用Python生成Fernet密钥
-    local key=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    # 使用Python生成Fernet密钥并确保正确的格式
+    local key=$(python3 -c '
+from cryptography.fernet import Fernet
+import base64
+key = Fernet.generate_key()
+print(key.decode())
+')
     
     if [ -z "$key" ]; then
         echo -e "${RED}生成加密密钥失败${NC}"
@@ -184,7 +189,7 @@ generate_key() {
     fi
     
     # 将密钥保存到文件
-    echo "$key" > "$KEY_FILE"
+    echo -n "$key" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
     echo -e "${GREEN}生成加密密钥: $KEY_FILE${NC}"
     return 0
@@ -193,13 +198,16 @@ generate_key() {
 # 加密令牌
 encrypt_token() {
     local token=$1
-    local key=$2
+    local key=$(cat "$KEY_FILE")
     
-    # 转义特殊字符
-    token=$(echo "$token" | sed 's/[\"]/\\&/g')
-    
-    # 使用Python加密令牌
-    local encrypted_token=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet('$key'.encode()).encrypt('$token'.encode()).decode())")
+    # 使用Python加密令牌，确保正确处理密钥格式
+    local encrypted_token=$(python3 -c '
+import sys, base64
+from cryptography.fernet import Fernet
+token, key = sys.argv[1:]
+f = Fernet(key.encode())
+print(f.encrypt(token.encode()).decode())
+' "$token" "$key")
     
     if [ -z "$encrypted_token" ]; then
         echo -e "${RED}加密令牌失败${NC}"
@@ -207,7 +215,7 @@ encrypt_token() {
     fi
     
     # 将加密令牌保存到文件
-    echo "$encrypted_token" > "$TOKEN_FILE"
+    echo -n "$encrypted_token" > "$TOKEN_FILE"
     chmod 600 "$TOKEN_FILE"
     echo -e "${GREEN}创建加密令牌文件: $TOKEN_FILE${NC}"
     
@@ -300,7 +308,8 @@ create_config() {
     
     local log_level_choice
     while true; do
-        read -p "请输入选项 [1-5] (默认: 2): " log_level_choice
+        echo -en "${BLUE}请输入选项 [1-5] (默认: 2): ${NC}" > /dev/tty
+        read log_level_choice < /dev/tty
         log_level_choice=${log_level_choice:-2}
         
         case $log_level_choice in
@@ -309,11 +318,11 @@ create_config() {
             3) log_level="WARNING"; break ;;
             4) log_level="ERROR"; break ;;
             5) log_level="CRITICAL"; break ;;
-            *) echo -e "${YELLOW}请输入1-5之间的数字${NC}" ;;
+            *) echo -e "${YELLOW}请输入1-5之间的数字${NC}" > /dev/tty ;;
         esac
     done
     
-    echo -e "${GREEN}已选择日志级别: $log_level${NC}"
+    echo -e "${GREEN}已选择日志级别: $log_level${NC}" > /dev/tty
     
     # 生成密钥
     local key=$(generate_key)
@@ -460,11 +469,15 @@ start_service() {
         return 1
     fi
     
-    # 验证权限
-    if [ ! -r "$CONFIG_FILE" ] || [ ! -r "$KEY_FILE" ] || [ ! -r "$TOKEN_FILE" ]; then
-        echo -e "${RED}配置文件权限错误${NC}"
+    # 验证权限（修改这部分）
+    if [ ! -f "$CONFIG_FILE" ] || [ ! -f "$KEY_FILE" ] || [ ! -f "$TOKEN_FILE" ]; then
+        echo -e "${RED}配置文件不存在${NC}"
         return 1
     fi
+    
+    # 确保文件所有者为root且权限正确
+    chown root:root "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE"
+    chmod 600 "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE"
     
     systemctl start safeline-autoblocker
     
