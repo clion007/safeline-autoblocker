@@ -123,7 +123,7 @@ class SafeLineAPI:
         headers = self._prepare_headers()
         
         # 从配置中获取每次查询的日志数量
-        max_logs = configer.get_value('GENERAL', 'MAX_LOGS_PER_QUERY')   
+        max_logs = self.get_configer().get_value('GENERAL', 'MAX_LOGS_PER_QUERY')
         
         # 使用page和page_size参数获取最新的日志
         params = {
@@ -146,11 +146,10 @@ class SafeLineAPI:
     
     def process_attack_logs(self):
         """处理攻击日志并提取IP"""
-        # 获取攻击日志
         logs = self.get_attack_logs()
         
         if not logs:
-            self.logger.debug("没有获取到攻击日志")
+            self.get_logger().debug("没有获取到攻击日志")
             return 0
         
         # 处理每条日志
@@ -164,7 +163,7 @@ class SafeLineAPI:
             attack_type = str(log_entry.get('attack_type'))
             
             # 获取攻击类型过滤配置
-            attack_types_filter = self.configer.get_value('GENERAL', 'ATTACK_TYPES_FILTER')
+            attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
             
             # 检查攻击类型过滤
             if attack_types_filter and attack_type not in attack_types_filter.split(','):
@@ -204,7 +203,7 @@ class SafeLineAPI:
         # 检查IP是否已在目标IP组中
         group_info = self._get_ip_group_info(group_name)
         if group_info and ip in group_info.get('ips', []):
-            self.logger.debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
+            self.get_logger().debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
             return
         
         # 添加新IP到队列

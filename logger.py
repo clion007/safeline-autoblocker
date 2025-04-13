@@ -38,7 +38,8 @@ class LoggerManager:
                 'max_size': 10485760,
                 'backup_count': 5,
                 'log_format': "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                'retention_days': 30
+                'retention_days': 30,
+                'clean_interval': 86400  # 添加日志清理间隔配置，默认24小时
             }
             
         # 确保日志目录存在（使用绝对路径）
@@ -109,10 +110,10 @@ class LoggerManager:
                     deleted_count += 1
             
             if deleted_count > 0:
-                self._logger.debug(f"已清理 {deleted_count} 个过期日志文件")
+                self.get_logger().debug(f"已清理 {deleted_count} 个过期日志文件")
                 
         except Exception as error:
-            self._logger.error(f"清理日志文件失败: {error}")
+            self.get_logger().error(f"清理日志文件失败: {error}")
 
     def reload(self):
         """重新加载日志配置"""

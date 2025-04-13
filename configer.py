@@ -30,8 +30,7 @@ class ConfigManager:
             'ATTACK_TYPES_FILTER': '-3',     # 默认过滤黑名单类型
         },
         'MAINTENANCE': {
-            'CACHE_CLEAN_INTERVAL': '3600',
-            'LOG_CLEAN_INTERVAL': '86400'
+            'CACHE_CLEAN_INTERVAL': '3600'
         },
         'TYPE_GROUP': {
             'HIGH_RISK_TYPES': '0,5,7,8,9,11,29',  # SQL注入,后门,代码执行,代码注入,命令注入,文件包含,模板注入
@@ -236,16 +235,16 @@ class ConfigManager:
         """重新加载配置"""
         if self._config is not None:
             self._config.clear()
-        self.load()        
-        logger = self.get_logger()
-        if self._config is not None and self._logger is not None:
-            logger.info('info', '配置已成功重新加载') 
-        from factory import Factory
-        Factory.get_logger_manager().reload()
-        logger = self.get_logger()
-        logger.info('info', '重新加载日志配置成功')
+        success = self.load()
         
-        return True
+        if success:
+            from factory import Factory
+            Factory.get_logger_manager().reload()
+            logger = self.get_logger()
+            logger.info('配置已成功重新加载')
+            logger.info('日志配置重新加载成功')
+        
+        return success
     
     def reset(self):
         """重置配置为默认值"""

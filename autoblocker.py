@@ -33,11 +33,11 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_inst
     
     # 检查是否需要清理日志
     logger_manager = Factory.get_logger_manager()
-    log_retention_days = logger_manager.get_config("retention_days")
-    if log_retention_days is not None:
-        log_retention_days = int(log_retention_days)
-    if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
-        logger.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
+    log_retention_days = int(logger_manager.get_config("retention_days"))
+    log_clean_interval = int(logger_manager.get_config("clean_interval"))
+    
+    if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > log_clean_interval:
+        logger.debug(f"执行日志清理，保留 {log_retention_days} 天")
         logger_manager.clean_old_logs()
         last_times['log_clean'] = current_time
     
@@ -159,20 +159,20 @@ def parse_arguments():
 
 def create_pid_file():
     """创建PID文件"""
-    # Linux下的标准PID文件位置
     pid_file = '/var/run/safeline-autoblocker.pid'
     
     try:
-        # 检查PID文件是否存在
         if os.path.exists(pid_file):
-            with open(pid_file, 'r') as f:
-                old_pid = f.read().strip()
             try:
-                # 在Linux下检查进程是否存在
-                os.kill(int(old_pid), 0)
-                raise RuntimeError(f"程序已在运行中 (PID: {old_pid})")
-            except (ProcessLookupError, ValueError):
-                # PID不存在或无效，删除旧的PID文件
+                with open(pid_file, 'r') as f:
+                    old_pid = int(f.read().strip())
+                try:
+                    os.kill(old_pid, 0)
+                    raise RuntimeError(f"程序已在运行中 (PID: {old_pid})")
+                except (ProcessLookupError, ValueError):
+                    os.remove(pid_file)
+            except (IOError, ValueError):
+                # PID文件损坏，直接删除
                 os.remove(pid_file)
         
         # 写入当前进程PID
@@ -239,11 +239,11 @@ def main():
         elif args.command == 'log':
             if args.log_command == 'level':
                 configer.set_log_config('log_level', args.value)
-                Factory.reload_logger()
+                Factory.get_logger_manager().reload()
                 logger.info(f"已设置日志级别为: {args.value}")
             elif args.log_command == 'retention':
                 configer.set_log_config('retention_days', args.days)
-                Factory.reload_logger()
+                Factory.get_logger_manager().reload()
                 logger.info(f"已设置日志保留天数为: {args.days} 天")
             elif args.log_command == 'clean':
                 logger_manager = Factory.get_logger_manager()
