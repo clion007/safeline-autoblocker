@@ -34,6 +34,8 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_inst
     # 检查是否需要清理日志
     logger_manager = Factory.get_logger_manager()
     log_retention_days = logger_manager.get_config("retention_days")
+    if log_retention_days is not None:
+        log_retention_days = int(log_retention_days)
     if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
         logger.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
         logger_manager.clean_old_logs()

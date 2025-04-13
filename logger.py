@@ -23,16 +23,15 @@ class LoggerManager:
             
         self._logger = None
         self._config = {}
+        
+        # 获取脚本所在目录
+        self._base_dir = os.path.dirname(os.path.abspath(__file__))
 
         # 加载日志配置
         try:
             with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                self._config = yaml.safe_load(f)
-            
-            # 配置日志系统
-            logging.config.dictConfig(self._config)
+                self._config = yaml.safe_load(f).copy()
         except Exception as e:
-            # 初始化时可能还没有日志记录器，使用默认配置
             print(f"加载日志配置失败: {e}，使用默认配置")
             self._config = {
                 'log_dir': 'logs',
@@ -44,6 +43,32 @@ class LoggerManager:
                 'retention_days': 30
             }
             
+        # 确保日志目录存在（使用绝对路径）
+        log_dir = os.path.join(self._base_dir, self._config['log_dir'])
+        os.makedirs(log_dir, exist_ok=True)
+            
+        # 配置日志系统（使用绝对路径）
+        log_file = os.path.join(self._base_dir, self._config['log_dir'], self._config['log_file'])
+        
+        # 创建独立的日志记录器
+        self._logger = logging.getLogger('autoblocker')
+        self._logger.setLevel(getattr(logging, self._config['log_level']))
+
+        # 创建格式化器
+        log_formatter = logging.Formatter(self._config['log_format'])
+        
+        # 创建处理器
+        handler = logging.handlers.RotatingFileHandler(
+            filename=log_file,
+            formatter=log_formatter,
+            maxBytes=self._config['max_size'],
+            backupCount=self._config['backup_count'],
+            encoding='utf-8'
+        )
+        
+        # 添加处理器到日志记录器
+        self._logger.addHandler(handler)
+
         self._initialized = True
     
     def get_config(self, key):
@@ -73,6 +98,8 @@ class LoggerManager:
         log_dir = self.get_config('log_dir')
         log_file = self.get_config('log_file')
         retention_days = self.get_config('retention_days')
+        if retention_days is not None:
+            retention_days = int(retention_days)
         
         if not log_dir or not log_file:
             return
