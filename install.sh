@@ -67,6 +67,8 @@ get_user_input() {
     # 显示提示信息
     echo -e "\n${BLUE}$prompt${NC}"
     
+    # 读取用户输入
+    local value
     while true; do
         if [ "$is_password" = "true" ]; then
             read -s value
