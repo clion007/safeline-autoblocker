@@ -73,11 +73,11 @@ class LoggerManager:
                 log_formatter = logging.Formatter(self.get_config('log_format'))
                 handler = logging.handlers.RotatingFileHandler(
                     filename=log_file,
-                    formatter=log_formatter,
                     maxBytes=self.get_config('max_size'),
                     backupCount=self.get_config('backup_count'),
                     encoding='utf-8'
                 )
+                handler.setFormatter(log_formatter)
                 self._logger.addHandler(handler)
             
         return self._logger
