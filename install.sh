@@ -269,7 +269,7 @@ create_config() {
     local host=$(get_user_input "雷池API地址" "localhost" "false")
     local port=$(get_user_input "雷池API端口" "9443" "false")
     local api_prefix=$(get_user_input "API前缀路径" "/api/open" "false")
-    local token=$(get_user_input "雷池API令牌" "" "true")
+    local token=$(get_user_input "雷池API令牌" "" "false")
     local high_risk_ip_group=$(get_user_input "高危攻击IP组名称" "黑名单" "false")
     local low_risk_ip_group=$(get_user_input "低危攻击IP组名称" "人机验证" "false")
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
@@ -277,12 +277,13 @@ create_config() {
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
     
     # 日志级别选择
-    echo -e "\n请选择日志级别:"
-    echo "1) DEBUG - 调试信息（最详细）"
-    echo "2) INFO - 一般信息（默认）"
-    echo "3) WARNING - 警告信息"
-    echo "4) ERROR - 错误信息"
-    echo "5) CRITICAL - 严重错误信息（最简略）"
+    echo -e "\n${BLUE}请选择日志级别:${NC}"
+    echo -e "  ${GREEN}1)${NC} DEBUG    - 调试信息    [最详细的日志记录]"
+    echo -e "  ${GREEN}2)${NC} INFO     - 一般信息    [默认级别]"
+    echo -e "  ${GREEN}3)${NC} WARNING  - 警告信息    [仅记录警告及以上]"
+    echo -e "  ${GREEN}4)${NC} ERROR    - 错误信息    [仅记录错误]"
+    echo -e "  ${GREEN}5)${NC} CRITICAL - 严重错误    [仅记录严重错误]"
+    echo "------------------------------------------------"
     
     local log_level_choice
     while true; do
@@ -295,7 +296,7 @@ create_config() {
             3) log_level="WARNING"; break ;;
             4) log_level="ERROR"; break ;;
             5) log_level="CRITICAL"; break ;;
-            *) echo -e "${YELLOW}无效选项，请重新输入${NC}" ;;
+            *) echo -e "${YELLOW}请输入1-5之间的数字${NC}" ;;
         esac
     done
     
