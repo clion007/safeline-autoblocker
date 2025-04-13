@@ -31,7 +31,11 @@ class Factory:
     @classmethod
     def get_logger(cls):
         """获取日志记录器"""
-        return cls.get_logger_manager().get_logger()
+        # 确保先获取logger_manager实例
+        logger_manager = cls.get_logger_manager()
+        if logger_manager is None:
+            raise RuntimeError("无法初始化日志管理器")
+        return logger_manager.get_logger()
     
     @classmethod
     def get_api_client(cls):
