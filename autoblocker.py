@@ -198,11 +198,11 @@ def main():
         if not configer.load():
             return 1
         
-        # 解析命令行参数
-        args = parse_arguments()
-        
         # 获取日志记录器
         logger = Factory.get_logger()
+        
+        # 解析命令行参数
+        args = parse_arguments()
         
         # 处理命令
         if args.command == 'version':
