@@ -50,58 +50,6 @@ print_step() {
     echo "=================================================="
 }
 
-# 获取用户输入
-get_user_input() {
-    local prompt=$1
-    local default=$2
-    local is_password=$3
-    local choices=$4
-
-    if [ -n "$default" ]; then
-        prompt="$prompt (默认: $default): "  
-    elif [ "$is_password" = "true" ]; then
-        prompt="$prompt (隐藏输入): "
-    else
-        prompt="$prompt: "
-    fi
-    # 显示提示信息
-    echo -e "\n${BLUE}$prompt${NC}"
-    
-    # 读取用户输入
-    local value
-    while true; do
-        if [ "$is_password" = "true" ]; then
-            read -s value
-            echo
-        else
-            read value
-        fi
-        
-        value=$(echo "$value" | xargs) # 去除前后空格
-        
-        # 使用默认值
-        if [ -z "$value" ] && [ -n "$default" ]; then
-            echo "$default"
-            return 0
-        fi
-        
-        # 验证选择
-        if [ -n "$choices" ] && [[ ! "$choices" =~ $(echo "$value" | tr '[:upper:]' '[:lower:]') ]]; then
-            echo -e "${YELLOW}请输入有效的选项: $choices${NC}"
-            continue
-        fi
-        
-        # 验证非空
-        if [ -z "$value" ] && [ -z "$default" ]; then
-            echo -e "${YELLOW}此项不能为空，请重新输入${NC}"
-            continue
-        fi
-        
-        echo "$value"
-        return 0
-    done
-}
-
 # 检查是否为root用户
 check_root() {
     if [ "$(id -u)" != "0" ]; then
@@ -264,6 +212,58 @@ encrypt_token() {
     echo -e "${GREEN}创建加密令牌文件: $TOKEN_FILE${NC}"
     
     return 0
+}
+
+# 获取用户输入
+get_user_input() {
+    local prompt=$1
+    local default=$2
+    local is_password=$3
+    local choices=$4
+
+    if [ -n "$default" ]; then
+        prompt="$prompt (默认: $default): "  
+    elif [ "$is_password" = "true" ]; then
+        prompt="$prompt (隐藏输入): "
+    else
+        prompt="$prompt: "
+    fi
+    # 显示提示信息
+    printf "\n${BLUE}$prompt${NC}"
+    
+    # 读取用户输入
+    local value
+    while true; do
+        if [ "$is_password" = "true" ]; then
+            read -s value
+            echo
+        else
+            read value
+        fi
+        
+        value=$(echo "$value" | xargs) # 去除前后空格
+        
+        # 使用默认值
+        if [ -z "$value" ] && [ -n "$default" ]; then
+            echo "$default"
+            return 0
+        fi
+        
+        # 验证选择
+        if [ -n "$choices" ] && [[ ! "$choices" =~ $(echo "$value" | tr '[:upper:]' '[:lower:]') ]]; then
+            echo -e "${YELLOW}请输入有效的选项: $choices${NC}"
+            continue
+        fi
+        
+        # 验证非空
+        if [ -z "$value" ] && [ -z "$default" ]; then
+            echo -e "${YELLOW}此项不能为空，请重新输入${NC}"
+            continue
+        fi
+        
+        echo "$value"
+        return 0
+    done
 }
 
 # 创建配置文件
