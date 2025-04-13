@@ -31,7 +31,7 @@ class Factory:
     @classmethod
     def get_logger(cls):
         """获取日志记录器"""
-        return cls._logger_manager.get_logger()
+        return cls.get_logger_manager().get_logger()
     
     @classmethod
     def get_api_client(cls):
