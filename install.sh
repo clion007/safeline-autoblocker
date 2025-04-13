@@ -221,6 +221,7 @@ get_user_input() {
     local is_password=$3
     local choices=$4
 
+    # 构造提示信息
     if [ -n "$default" ]; then
         prompt="$prompt (默认: $default): "  
     elif [ "$is_password" = "true" ]; then
@@ -228,17 +229,16 @@ get_user_input() {
     else
         prompt="$prompt: "
     fi
-    # 显示提示信息
-    printf "\n${BLUE}$prompt${NC}"
     
-    # 读取用户输入
     local value
     while true; do
+        # 使用 /dev/tty 直接与终端交互
+        echo -en "${BLUE}$prompt${NC}" > /dev/tty        
         if [ "$is_password" = "true" ]; then
-            read -s value
-            echo
+            read -s value < /dev/tty
+            echo > /dev/tty
         else
-            read value
+            read value < /dev/tty
         fi
         
         value=$(echo "$value" | xargs) # 去除前后空格
@@ -251,13 +251,13 @@ get_user_input() {
         
         # 验证选择
         if [ -n "$choices" ] && [[ ! "$choices" =~ $(echo "$value" | tr '[:upper:]' '[:lower:]') ]]; then
-            echo -e "${YELLOW}请输入有效的选项: $choices${NC}"
+            echo -e "${YELLOW}请输入有效的选项: $choices${NC}" > /dev/tty
             continue
         fi
         
         # 验证非空
         if [ -z "$value" ] && [ -z "$default" ]; then
-            echo -e "${YELLOW}此项不能为空，请重新输入${NC}"
+            echo -e "${YELLOW}此项不能为空，请重新输入${NC}" > /dev/tty
             continue
         fi
         
