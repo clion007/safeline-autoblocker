@@ -245,6 +245,9 @@ encrypt_token() {
     local token=$1
     local key=$2
     
+    # 转义特殊字符
+    token=$(echo "$token" | sed 's/[\"]/\\&/g')
+    
     # 使用Python加密令牌
     local encrypted_token=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet('$key'.encode()).encrypt('$token'.encode()).decode())")
     
@@ -383,8 +386,12 @@ After=network.target
 
 [Service]
 Type=simple
+User=root
+WorkingDirectory=$INSTALL_DIR
+PIDFile=/var/run/safeline-autoblocker.pid
 ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
@@ -427,8 +434,11 @@ start_service() {
 cleanup_files() {
     echo -e "${YELLOW}正在清理已安装的文件...${NC}"
     
-    # 禁用服务
+    # 停止服务
     systemctl stop safeline-autoblocker 2>/dev/null
+    
+    # 等待停止后禁用服务
+    sleep 2  
     systemctl disable safeline-autoblocker 2>/dev/null
     
     # 删除服务文件
