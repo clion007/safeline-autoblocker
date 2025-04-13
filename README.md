@@ -166,7 +166,7 @@ sudo python3 /opt/safeline/scripts/autoblocker.py
 运行卸载脚本：
 
 ```bash
-sudo python3 /opt/safeline/scripts/uninstall.sh
+sudo bash /opt/safeline/scripts/uninstall.sh
 ```
 
 ### 手动卸载
