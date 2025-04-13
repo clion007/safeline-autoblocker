@@ -215,8 +215,10 @@ download_files() {
             echo -e "${RED}下载失败: $file${NC}"
             return 1
         fi
-        # 设置执行权限
-        chmod 755 "$destination"
+        # 设置执行权限（排除文档文件）
+        if [ "$file" != "README.md" ] && [ "$file" != "LICENSE" ]; then
+            chmod 755 "$destination"
+        fi
     done
     
     echo -e "${GREEN}所有文件下载完成${NC}"
