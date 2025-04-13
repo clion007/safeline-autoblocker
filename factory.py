@@ -40,7 +40,7 @@ class Factory:
             cls._logger_manager = None
         
         # 获取新的日志管理器
-        cls._logger_manager = cls.get_logger_manager()
+        cls.get_logger_manager()
         logger = cls.get_logger()
         
         # 如果API客户端已存在，更新其日志实例
