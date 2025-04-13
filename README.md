@@ -36,12 +36,12 @@ SafeLine AutoBlocker是一个用于自动识别和封禁恶意IP的Python脚本�
 使用以下命令安装：
 
 ```bash
-wget -O - https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install.sh | sudo bash
+wget -O - https://gitee.com/clion007/safeline-autoblocker/raw/main/install.sh | sudo bash
 ```
 或者
 
 ```bash
-curl -sSL https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install.sh | sudo bash
+curl -sSL https://gitee.com/clion007/safeline-autoblocker/raw/main/install.sh | sudo bash
 ```
 
 ### 手动安装
@@ -49,14 +49,14 @@ curl -sSL https://gitee.com/clion007/safeline-autoblocker/raw/main/quick-install
 1. 下载安装脚本：
 
 ```bash
-wget https://gitee.com/clion007/safeline-autoblocker/raw/main/install-autoblocker.py -O /tmp/install-autoblocker.py
+wget https://gitee.com/clion007/safeline-autoblocker/raw/main/install.sh -O /tmp/install.sh
 ```
 
 2. 运行安装脚本：
 
 ```bash
-sudo chmod +x /tmp/install-autoblocker.py
-sudo python3 /tmp/install-autoblocker.py
+sudo chmod +x /tmp/install.sh
+sudo python3 /tmp/install.sh
 ```
 
 3. 按照提示输入雷池WAF的API信息。
