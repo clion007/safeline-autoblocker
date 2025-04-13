@@ -259,7 +259,7 @@ class ConfigManager:
             # 读取现有配置
             if os.path.exists(self.LOG_CONFIG_FILE):
                 with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
+                    config = yaml.safe_load(f) or {}
             else:
                 config = {}
             
@@ -280,7 +280,8 @@ class ConfigManager:
         except Exception as error:
             logger = self.get_logger()
             logger.error(f"更新日志配置失败: {error}")
-    
+            return False
+
     def get_risk_level_for_attack_type(self, attack_type_id):
         """获取攻击类型的风险等级"""
         high_risk_types = set(self.get_value('TYPE_GROUP', 'HIGH_RISK_TYPES').split(','))

@@ -32,10 +32,11 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_inst
         last_times['cache_clean'] = current_time
     
     # 检查是否需要清理日志
-    log_retention_days = int(configer.get_value('LOGS', 'RETENTION_DAYS'))
+    logger_manager = Factory.get_logger_manager()
+    log_retention_days = logger_manager.get_config("retention_days")
     if log_retention_days > 0 and (current_time - last_times['log_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'LOG_CLEAN_INTERVAL')):
         logger.debug(f"执行额外的日志清理，保留 {log_retention_days} 天")
-        Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
+        logger_manager.clean_old_logs()
         last_times['log_clean'] = current_time
     
     return last_times
@@ -236,17 +237,18 @@ def main():
         elif args.command == 'log':
             if args.log_command == 'level':
                 configer.set_log_config('log_level', args.value)
-                Factory.reset()
+                Factory.reload_logger()
                 logger.info(f"已设置日志级别为: {args.value}")
             elif args.log_command == 'retention':
-                configer.set_value('LOGS', 'RETENTION_DAYS', str(args.days))
-                Factory.reset()
+                configer.set_log_config('retention_days', args.days)
+                Factory.reload_logger()
                 logger.info(f"已设置日志保留天数为: {args.days} 天")
             elif args.log_command == 'clean':
-                log_retention_days = configer.get_value('LOGS', 'RETENTION_DAYS')
+                logger_manager = Factory.get_logger_manager()
+                log_retention_days = logger_manager.get_config("retention_days")
                 logger.info(f"手动清理日志，保留 {log_retention_days} 天")
-                Factory.get_logger_manager().clean_old_logs(retention_days=log_retention_days)
-            return 0
+                logger_manager.clean_old_logs()
+                return 0
         elif args.command in ['view', 'set', 'reset', 'reload']:
             return handle_config_command(args, configer, logger)
         
