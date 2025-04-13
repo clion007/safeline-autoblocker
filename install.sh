@@ -56,25 +56,23 @@ get_user_input() {
     local default=$2
     local is_password=$3
     local choices=$4
-    
-    local input_prompt
-    
+
     if [ -n "$default" ]; then
-        if [ "$is_password" = "true" ]; then
-            input_prompt="$prompt [隐藏]: "
-        else
-            input_prompt="$prompt [$default]: "
-        fi
+        prompt="$prompt (默认: $default): "  
+    elif [ "$is_password" = "true" ]; then
+        prompt="$prompt (隐藏输入): "
     else
-        input_prompt="$prompt: "
+        prompt="$prompt: "
     fi
+    # 显示提示信息
+    echo -e "\n${BLUE}$prompt${NC}"
     
     while true; do
         if [ "$is_password" = "true" ]; then
-            read -s -p "$input_prompt" value
+            read -s value
             echo
         else
-            read -p "$input_prompt" value
+            read value
         fi
         
         value=$(echo "$value" | xargs) # 去除前后空格
@@ -269,20 +267,28 @@ encrypt_token() {
 # 创建配置文件
 create_config() {
     print_step 3 6 "配置信息设置"
-    echo "请输入以下配置信息:"
     
+    echo -e "\n${BLUE}基础配置:${NC}"
+    echo "------------------------------------------------"
     local host=$(get_user_input "雷池API地址" "localhost" "false")
     local port=$(get_user_input "雷池API端口" "9443" "false")
     local api_prefix=$(get_user_input "API前缀路径" "/api/open" "false")
     local token=$(get_user_input "雷池API令牌" "" "false")
+    
+    echo -e "\n${BLUE}IP组配置:${NC}"
+    echo "------------------------------------------------"
     local high_risk_ip_group=$(get_user_input "高危攻击IP组名称" "黑名单" "false")
     local low_risk_ip_group=$(get_user_input "低危攻击IP组名称" "人机验证" "false")
+    
+    echo -e "\n${BLUE}性能配置:${NC}"
+    echo "------------------------------------------------"
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
     local max_logs=$(get_user_input "每次查询最大日志数量" "100" "false")
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
     
     # 日志级别选择
-    echo -e "\n${BLUE}请选择日志级别:${NC}"
+    echo -e "\n${BLUE}日志级别配置:${NC}"
+    echo "------------------------------------------------"
     echo -e "  ${GREEN}1)${NC} DEBUG    - 调试信息    [最详细的日志记录]"
     echo -e "  ${GREEN}2)${NC} INFO     - 一般信息    [默认级别]"
     echo -e "  ${GREEN}3)${NC} WARNING  - 警告信息    [仅记录警告及以上]"
