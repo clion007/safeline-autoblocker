@@ -42,5 +42,5 @@ class Factory:
         """获取API客户端实例"""
         if cls._api_client is None:
             from api import SafeLineAPI
-            cls._api_client = SafeLineAPI(cls.get_configer(), cls.get_logger())
+            cls._api_client = SafeLineAPI()
         return cls._api_client
