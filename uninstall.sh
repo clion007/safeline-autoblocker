@@ -87,13 +87,14 @@ remove_service_file() {
     if [ -f "$SERVICE_FILE" ]; then
         rm -f "$SERVICE_FILE" && echo "删除服务文件: $SERVICE_FILE" || echo "删除服务文件失败"
         systemctl daemon-reload
+    fi
 }
 
 # 删除配置文件
 remove_config() {
     # 删除主配置文件和目录
     if [ -d "$CONFIG_DIR" ]; then
-        rm -rf "$CONFIG_FILE" && echo "成功删除配置文件及目录: $CONFIG_DIR" || echo "删除配置文件失败"
+        rm -rf "$CONFIG_DIR" && echo "成功删除配置文件及目录: $CONFIG_DIR" || echo "删除配置文件失败"
     fi
 }
 
@@ -101,8 +102,12 @@ remove_config() {
 remove_scripts() {
     script_files=(
         "$INSTALL_DIR/api.py"
-        "$INSTALL_DIR/config.py"
+        "$INSTALL_DIR/LICENSE"
+        "$INSTALL_DIR/README.md"
         "$INSTALL_DIR/logger.py"
+        "$INSTALL_DIR/version.py"
+        "$INSTALL_DIR/configer.py"
+        "$INSTALL_DIR/factory.py"
         "$INSTALL_DIR/autoblocker.py"
     )
     
@@ -121,8 +126,6 @@ config_removed=true
 remove_config || config_removed=false
 script_removed=true
 remove_scripts || script_removed=false
-dirs_removed=true
-remove_directories || dirs_removed=false
 
 # 卸载结果反馈
 echo -e "\n卸载结果:"
@@ -142,14 +145,18 @@ PARENT_DIR=$(dirname "$INSTALL_DIR")
 # 删除安装目录及卸载脚本自身
 if [ -d "$INSTALL_DIR" ]; then
     echo "删除安装目录: $INSTALL_DIR"
-    # 使用后台任务删除，即使脚本被删除也能完成操作
-    (sleep 1; rm -rf "$INSTALL_DIR"; 
-     # 如果父目录为空，也一并删除
-     if [ -d "$PARENT_DIR" ] && [ -z "$(ls -A "$PARENT_DIR")" ]; then
-         echo "删除空父目录: $PARENT_DIR"
-         rmdir "$PARENT_DIR"
-     fi) &
+    # 先删除安装目录下的其他文件
+    rm -rf "${INSTALL_DIR:?}"/* 2>/dev/null
     
-    echo "卸载完成，脚本将自动退出..."
-    exit 0
+    # 如果父目录为空，准备删除
+    if [ -d "$PARENT_DIR" ] && [ "$(ls -A "$PARENT_DIR" 2>/dev/null | grep -v "$(basename "$0")")" = "" ]; then
+        echo "父目录为空，将在脚本结束后删除"
+        (sleep 1; rm -f "$0"; rmdir "$PARENT_DIR" 2>/dev/null) &
+    else
+        # 仅删除卸载脚本
+        (sleep 1; rm -f "$0") &
+    fi
 fi
+
+echo "卸载完成，脚本将自动退出..."
+exit 0
