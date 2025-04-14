@@ -23,9 +23,15 @@ class Factory:
     @classmethod
     def get_logger_manager(cls):
         """获取日志管理器实例"""
-        if cls._logger_manager is None:
-            from logger import LoggerManager
-            cls._logger_manager = LoggerManager()
+        try:
+            if cls._logger_manager is None:
+                from logger import LoggerManager
+                cls._logger_manager = LoggerManager()
+                
+        except Exception as e:
+            print(f"无法初始化日志系统: {str(e)}")
+            print("请检查/etc/safeline/log.yaml配置文件格式和内容")
+            raise SystemExit(1)
         return cls._logger_manager
     
     @classmethod

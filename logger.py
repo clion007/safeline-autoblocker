@@ -22,31 +22,27 @@ class LoggerManager:
         if hasattr(self, '_initialized'):
             return
             
-        self._logger = None
+        self._logger = None        
         self._config = {}
 
-        # 加载日志配置
         try:
-            with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                self._config = yaml.safe_load(f)
-        except Exception as e:
-            print(f"加载日志配置失败: {e}，使用默认配置")
-            self._config = {
-                'log_dir': 'logs',
-                'log_file': 'error.log',
-                'log_level': 'INFO',
-                'max_size': 10485760,
-                'backup_count': 5,
-                'log_format': "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                'retention_days': 30,
-                'clean_interval': 86400  # 添加日志清理间隔配置，默认24小时
-            }
-            
-        # 确保日志目录存在（使用绝对路径）
-        log_dir = self.get_config('log_dir')
-        os.makedirs(log_dir, exist_ok=True)
+            # 尝试加载实际配置（覆盖默认值）
+            if os.path.exists(self.LOG_CONFIG_FILE):
+                with open(self.LOG_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    self._config = yaml.safe_load(f) or {}
+                    
+                # 验证必须配置项
+                required_keys = ['log_dir', 'log_file', 'log_level']
+                for key in required_keys:
+                    if key not in self._config:
+                        raise ValueError(f"缺少必要配置项: {key}")
 
-        self._initialized = True
+                # 确保日志目录存在（使用绝对路径）
+                log_dir = self.get_config('log_dir')
+                os.makedirs(log_dir, exist_ok=True)
+                self._initialized = True
+        except Exception as e:
+            raise RuntimeError(f"日志配置加载失败: {str(e)}") from e
     
     def get_config(self, key):
         """获取日志配置项"""

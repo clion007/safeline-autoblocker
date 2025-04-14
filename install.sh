@@ -16,6 +16,7 @@ NC='\033[0m' # 无颜色
 # 定义路径和文件
 CONFIG_DIR="/etc/safeline"
 CONFIG_FILE="$CONFIG_DIR/setting.conf"
+LOG_CONFIG_FILE="$CONFIG_DIR/log.yaml"
 KEY_FILE="$CONFIG_DIR/token.key"
 TOKEN_FILE="$CONFIG_DIR/token.enc"
 MAIN_SCRIPT="autoblocker.py"
@@ -376,7 +377,6 @@ EOF
     echo -e "${GREEN}创建主配置文件: $CONFIG_FILE${NC}"
     
     # 创建日志配置文件 (YAML格式)
-    local LOG_CONFIG_FILE="$CONFIG_DIR/log.yaml"
     cat > "$LOG_CONFIG_FILE" << EOF
 # 日志配置文件
 log_dir: logs
@@ -464,21 +464,21 @@ start_service() {
         return 1
     fi
     
-    # 验证配置文件
-    if ! python3 -c "import yaml; yaml.safe_load(open('$CONFIG_DIR/log.yaml'))"; then
+    # 验证日志配置文件
+    if ! python3 -c "import yaml; yaml.safe_load(open('$LOG_CONFIG_FILE'))"; then
         echo -e "${RED}日志配置文件格式错误${NC}"
         return 1
     fi
     
-    # 验证权限（修改这部分）
+    # 验证其他配置文件是否存在
     if [ ! -f "$CONFIG_FILE" ] || [ ! -f "$KEY_FILE" ] || [ ! -f "$TOKEN_FILE" ]; then
         echo -e "${RED}配置文件不存在${NC}"
         return 1
     fi
     
     # 确保文件所有者为root且权限正确
-    chown root:root "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE"
-    chmod 600 "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE"
+    chown root:root "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE" "$LOG_CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE" "$KEY_FILE" "$TOKEN_FILE" "$LOG_CONFIG_FILE"
     
     systemctl start safeline-autoblocker
     

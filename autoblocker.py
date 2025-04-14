@@ -276,7 +276,6 @@ def main():
             return 1
             
     except Exception as e:
-        logger = Factory.get_logger()
         logger.error(f"程序启动失败: {str(e)}")
         return 1
 
