@@ -70,8 +70,8 @@ class SafeLineAPI:
         """获取基础URL"""
         if self._baseurl is None:
             configer = self.get_configer()
-            host = configer.get_value('GENERAL', 'HOST')
-            port = configer.get_value('GENERAL', 'PORT')
+            host = configer.get_value('GENERAL', 'SAFELINE_HOST')
+            port = configer.get_value('GENERAL', 'SAFELINE_PORT')
             api_prefix = configer.get_value('GENERAL', 'API_PREFIX')
 
             self.baseurl =f"https://{host}:{port}{api_prefix}"
