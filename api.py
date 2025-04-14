@@ -202,7 +202,7 @@ class SafeLineAPI:
         
         # 检查IP是否已在目标IP组中
         group_info = self._get_ip_group_info(group_name)
-        if group_info and ip in group_info.get('ips', []):
+        if group_info and 'ips' in group_info and ip in group_info.get('ips', []):
             self.get_logger().debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
             return
         
@@ -210,9 +210,6 @@ class SafeLineAPI:
         self.ip_batch_queue[group_name].append({
             'ip': ip
         })
-        
-        # 执行添加IP
-        self.process_ip_batch()
 
     def process_ip_batch(self):
         """处理IP批处理队列"""
@@ -326,25 +323,32 @@ class SafeLineAPI:
             self.ip_groups_cache = {}
             self.ip_groups_cache_time = current_time
             
+            # 查找目标IP组
+            target_group = None
             for group in result['data']['nodes']:
                 if group.get('comment') == group_name:
-                    # 获取详细信息
-                    detail_url = self._prepare_url(f"ipgroup/detail?id={group.get('id')}")
-                    detail_response = self.session.get(detail_url, headers=headers)
+                    target_group = group
+                    break
                     
-                    if detail_response.status_code == 200:
-                        detail_result = detail_response.json()
-                        if 'data' in detail_result and 'data' in detail_result['data']:
-                            group_info = detail_result['data']['data']
-                            self.ip_groups_cache[group_name] = group_info
-                            return group_info
-                    
-                    self.ip_groups_cache[group_name] = group
-                    return group
+            if not target_group:
+                self.get_logger().error(f"未找到名为 {group_name} 的IP组")
+                return None
+                
+            # 获取详细信息
+            detail_url = self._prepare_url(f"ipgroup/detail?id={target_group.get('id')}")
+            detail_response = self.session.get(detail_url, headers=headers)
             
-            self.get_logger().error(f"未找到名为 {group_name} 的IP组")
-            return None
+            if detail_response.status_code == 200:
+                detail_result = detail_response.json()
+                if 'data' in detail_result and 'data' in detail_result['data']:
+                    group_info = detail_result['data']['data']
+                    self.ip_groups_cache[group_name] = group_info
+                    return group_info
             
+            # 如果无法获取详细信息，使用基本信息
+            self.ip_groups_cache[group_name] = target_group
+            return target_group
+                
         except Exception as error:
             self.get_logger().error(f"获取IP组信息异常: {str(error)}")
             return None
