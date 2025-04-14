@@ -104,7 +104,7 @@ check_dependencies() {
     
     # 安装Python依赖
     echo "安装Python依赖..."
-    pip3 install cryptography requests
+    pip3 install cryptography pyyaml requests
 }
 
 # 创建目录
@@ -564,7 +564,7 @@ main() {
     # 启动服务
     if ! start_service; then
         echo -e "${RED}启动服务失败，安装中止${NC}"
-        cleanup_files
+        # cleanup_files
         exit 1
     fi
     
