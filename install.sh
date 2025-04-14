@@ -562,8 +562,7 @@ main() {
     
     # 启动服务
     if ! start_service; then
-        echo -e "${RED}启动服务失败，安装中止${NC}"
-        # cleanup_files
+        echo -e "${RED}启动服务失败，请检查日志错误信息${NC}"
         exit 1
     fi
     
