@@ -102,7 +102,6 @@ check_dependencies() {
         echo -e "${GREEN}依赖安装完成${NC}"
     fi
     
-    # 安装Python依赖
     echo "安装Python依赖..."
     pip3 install cryptography pyyaml requests
 }
