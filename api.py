@@ -7,9 +7,14 @@ from socketserver import BaseRequestHandler
 import time
 import token
 import requests
+import warnings
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+# 禁用不安全请求的警告
+warnings.simplefilter('ignore', InsecureRequestWarning)
 
 class SafeLineAPI:
     """雷池WAF API交互类"""
@@ -216,7 +221,8 @@ class SafeLineAPI:
         if not self.ip_batch_queue:
             return
         
-        self.get_logger.debug(f"开始处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
+        # 修正：self.get_logger 应该是 self.get_logger()
+        self.get_logger().debug(f"开始处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
         
         for group_name, ip_list in self.ip_batch_queue.items():
             if not ip_list:
@@ -225,7 +231,8 @@ class SafeLineAPI:
             # 获取IP组信息
             group_info = self._get_ip_group_info(group_name)
             if not group_info:
-                self.get_logger.error(f"未找到IP组 '{group_name}'，跳过添加IP")
+                # 修正：self.get_logger 应该是 self.get_logger()
+                self.get_logger().error(f"未找到IP组 '{group_name}'，跳过添加IP")
                 continue
             
             group_id = group_info.get('id')
@@ -283,15 +290,19 @@ class SafeLineAPI:
                 return True
             else:
                 if len(new_ips) == 1:
-                    self.get_logger.error(f"添加IP {new_ips[0]} 到组 '{group_name}' 失败: {response.text}")
+                    # 修正：self.get_logger 应该是 self.get_logger()
+                    self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 失败: {response.text}")
                 else:
-                    self.get_logger.error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
+                    # 修正：self.get_logger 应该是 self.get_logger()
+                    self.get_logger().error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
                 return False
         except Exception as error:
             if len(new_ips) == 1:
-                self.get_logger.error(f"添加IP {new_ips[0]} 到组 '{group_name}' 时出错: {str(error)}")
+                # 修正：self.get_logger 应该是 self.get_logger()
+                self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 时出错: {str(error)}")
             else:
-                self.get_logger.error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
+                # 修正：self.get_logger 应该是 self.get_logger()
+                self.get_logger().error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
             return False
     
     def _get_ip_group_info(self, group_name):
@@ -369,4 +380,5 @@ class SafeLineAPI:
             del self.added_ips_cache[key]
         
         if expired_keys:
-            self.get_logger.debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
+            # 修正：self.get_logger 应该是 self.get_logger()
+            self.get_logger().debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
