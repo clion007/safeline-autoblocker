@@ -8,7 +8,7 @@ import os
 import glob
 import yaml
 import logging
-import logging.config
+import logging.handlers
 from datetime import datetime, timedelta
 
 class LoggerManager:
