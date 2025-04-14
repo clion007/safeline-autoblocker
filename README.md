@@ -131,6 +131,27 @@ sudo systemctl status safeline-autoblocker
 ```bash
 sudo journalctl -u safeline-autoblocker -f
 ```
+4. 停止服务：
+
+```bash
+sudo systemctl stop safeline-autoblocker
+```
+
+5. 禁用开机自启：
+
+```bash
+sudo systemctl disable safeline-autoblocker
+```
+6. 启用开机自启：
+
+```bash
+sudo systemctl enable safeline-autoblocker
+```
+7. 重启服务：
+
+```bash
+sudo systemctl restart safeline-autoblocker
+```
 
 ### 手动运行
 

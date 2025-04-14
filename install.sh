@@ -575,6 +575,9 @@ main() {
       启动服务: systemctl start safeline-autoblocker
       停止服务: systemctl stop safeline-autoblocker
       查看状态: systemctl status safeline-autoblocker
+      重启服务: systemctl restart safeline-autoblocker
+      启用服务: systemctl enable safeline-autoblocker
+      禁用服务: systemctl disable safeline-autoblocker
       查看日志: journalctl -u safeline-autoblocker -f
       
     配置文件位置: $CONFIG_FILE
