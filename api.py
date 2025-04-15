@@ -175,19 +175,21 @@ class SafeLineAPI:
     
     def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
         """更新IP组，添加新IP"""
-        url = self._prepare_url(f'ipgroup/detail?id={group_id}')
+        url = self._prepare_url(f'ipgroup')
         headers = self._prepare_headers()
         
         data = {
             "id": group_id,
             "comment": group_name,
-            "reference": "",
             "ips": current_ips,
-            "builtin": False
+            "reference": "",
+            "builtin": "false",
         }
+        # 数据序列化
+        data = json.dumps(data)
         
         try:
-            response = self.session.put(url, headers=headers, json=data)
+            response = self.session.put(url, headers=headers, data=data)
             success = response.status_code == 200 and response.json().get('err') is None
             
             if success:
