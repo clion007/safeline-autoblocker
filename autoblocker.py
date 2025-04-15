@@ -335,7 +335,7 @@ def main():
             
             # 获取API实例
             instance = get_instances('api')
-            if not api_instance:
+            if not instance:
                 logger.error("无法创建API实例，操作取消")
                 return 1
             
