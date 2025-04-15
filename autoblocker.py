@@ -21,9 +21,8 @@ from datetime import datetime, timedelta
 from version import PROGRAM_NAME, get_version_string
 
 
-def perform_log_maintenance(current_time, last_times, configer, api, logger_instance=None):
+def perform_log_maintenance(current_time, last_times, configer, api, logger_manager, logger):
     """集中处理日志维护任务"""    
-    logger = logger_instance or Factory.get_logger()
     
     # 检查是否需要清理缓存
     if (current_time - last_times['cache_clean']).total_seconds() > int(configer.get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL')):
@@ -32,7 +31,6 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_inst
         last_times['cache_clean'] = current_time
     
     # 检查是否需要清理日志
-    logger_manager = Factory.get_logger_manager()
     log_retention_days = int(logger_manager.get_config("retention_days"))
     log_clean_interval = int(logger_manager.get_config("clean_interval"))
     
@@ -42,55 +40,6 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_inst
         last_times['log_clean'] = current_time
     
     return last_times
-
-def api_monitor(configer=None, logger_instance=None, existing_api=None):
-    """API监控函数"""
-    configer = configer or Factory.get_configer()
-    logger = logger_instance or Factory.get_logger()
-    
-    # 初始化API实例 - 使用工厂模式
-    api = existing_api or Factory.get_api_client()
-    if not api:
-        logger.error("无法创建API实例，监控终止")
-        return False
-    
-    # 初始化时间记录
-    last_times = {
-        'query': datetime.now() - timedelta(seconds=int(configer.get_value('GENERAL', 'QUERY_INTERVAL'))),
-        'log_clean': datetime.now(),
-        'cache_clean': datetime.now()
-    }
-    
-    logger.info("开始API监控模式")
-    
-    try:
-        while True:
-            current_time = datetime.now()
-            
-            # 检查是否需要查询新日志
-            if (current_time - last_times['query']).total_seconds() > int(configer.get_value('GENERAL', 'QUERY_INTERVAL')):
-                # 直接调用API类中的方法处理攻击日志
-                processed_count = api.process_attack_logs()
-                if processed_count > 0:
-                    logger.info(f"处理了 {processed_count} 条攻击日志")
-                last_times['query'] = current_time
-            
-            # 每天清理一次旧日志
-            if current_time.day != last_times['log_clean'].day:
-                last_times = perform_log_maintenance(current_time, last_times, configer, api, logger)
-            
-            time.sleep(1)
-    
-    except KeyboardInterrupt:
-        logger.info("收到中断信号，正在优雅退出...")
-        # 执行清理工作
-        api.clean_cache()
-        logger.info("监控已停止")
-    except Exception as error:
-        logger.error(f"监控过程中发生错误: {str(error)}")
-        return False
-    
-    return True
 
 def parse_arguments():
     """解析命令行参数"""
@@ -157,6 +106,50 @@ def parse_arguments():
     
     return parser.parse_args()
 
+def handle_config_command(args, configer, logger):
+    """处理配置相关命令"""
+    
+    if args.command == 'view':
+        if not configer.is_loaded():
+            logger.error("错误: 配置未加载")
+            return 1
+            
+        # 直接读取并打印配置文件内容
+        config_file = configer.CONFIG_FILE
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                print(f.read())
+        except Exception as e:
+            logger.error(f"读取配置文件失败: {str(e)}")
+            return 1
+    
+    elif args.command == 'set':
+        if configer.set_value(args.section, args.option, args.value):
+            logger.info(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
+        else:
+            logger.error(f"错误: 设置 {args.section}.{args.option} 失败")
+            return 1
+    
+    elif args.command == 'reset':
+        if not args.confirm:
+            logger.warning("警告: 此操作将重置所有配置为默认值。如果确认，请添加 --confirm 参数。")
+            return 1
+        
+        if configer.reset():  # 修改方法名
+            logger.info("成功: 配置已重置为默认值")
+        else:
+            logger.error("错误: 重置配置失败")
+            return 1
+    
+    elif args.command == 'reload':
+        if configer.reload():  # 添加重新加载方法
+            logger.info("成功: 配置已重新加载")
+        else:
+            logger.error("错误: 重新加载配置失败")
+            return 1
+    
+    return 0
+
 def create_pid_file():
     """创建PID文件"""
     pid_file = '/var/run/safeline-autoblocker.pid'
@@ -190,16 +183,97 @@ def create_pid_file():
     except (IOError, OSError) as e:
         raise RuntimeError(f"无法创建或管理PID文件: {str(e)}")
 
+def get_instances(*instance_names):
+    """根据名称获取多个实例
+    
+    Args:
+        *instance_names: 实例名称列表，可选值: 'configer', 'logger', 'api'
+        
+    Returns:
+        dict: 包含请求的实例的字典
+        None: 如果任何必需的实例获取失败
+    """
+    instances = {}
+    
+    try:
+        for name in instance_names:
+            if name == 'logger':
+                instances['logger'] = Factory.get_logger()
+            elif name == 'configer':
+                configer = Factory.get_configer()
+                if not configer.load():
+                    if 'logger' in instances:
+                        instances['logger'].error("配置加载失败")
+                    return None
+                instances['configer'] = configer
+            elif name == 'api':
+                api = Factory.get_api_client()
+                if not api:
+                    if 'logger' in instances:
+                        instances['logger'].error("无法创建API实例")
+                    return None
+                instances['api'] = api
+            else:
+                if 'logger' in instances:
+                    instances['logger'].error(f"未知的实例名称: {name}")
+                return None
+                
+        return instances
+    except Exception as e:
+        if 'logger' in instances:
+            instances['logger'].error(f"获取实例失败: {str(e)}")
+        return None
+
+def api_monitor(configer, logger, api):
+    """API监控函数"""    
+    # 初始化时间记录
+    last_times = {
+        'query': datetime.now() - timedelta(seconds=int(configer.get_value('GENERAL', 'QUERY_INTERVAL'))),
+        'log_clean': datetime.now(),
+        'cache_clean': datetime.now()
+    }
+    
+    logger.info("开始API监控模式")
+    
+    try:
+        while True:
+            current_time = datetime.now()
+            
+            # 检查是否需要查询新日志
+            if (current_time - last_times['query']).total_seconds() > int(configer.get_value('GENERAL', 'QUERY_INTERVAL')):
+                # 直接调用API类中的方法处理攻击日志
+                processed_count = api.process_attack_logs()
+                if processed_count > 0:
+                    logger.info(f"处理了 {processed_count} 条攻击日志")
+                last_times['query'] = current_time
+            
+            # 每天清理一次旧日志
+            if current_time.day != last_times['log_clean'].day:
+                last_times = perform_log_maintenance(current_time, last_times, configer, api, logger)
+            
+            time.sleep(1)
+    
+    except KeyboardInterrupt:
+        logger.info("收到中断信号，正在优雅退出...")
+        # 执行清理工作
+        api.clean_cache()
+        logger.info("监控已停止")
+    except Exception as error:
+        logger.error(f"监控过程中发生错误: {str(error)}")
+        return False
+    
+    return True
+
 def main():
     """主函数"""
     try:
-        # 获取配置管理器并加载配置
-        configer = Factory.get_configer()
-        if not configer.load():
+        # 使用get_instances获取所需实例
+        instances = get_instances('configer', 'logger')
+        if not instances:
             return 1
         
-        # 获取日志记录器
-        logger = Factory.get_logger()
+        configer = instances['configer']
+        logger = instances['logger']
         
         # 解析命令行参数
         args = parse_arguments()
@@ -259,10 +333,13 @@ def main():
             # 创建PID文件（仅在监控模式下）
             create_pid_file()
             
-            api = Factory.get_api_client()
-            if not api:
+            # 获取API实例
+            instance = get_instances('api')
+            if not api_instance:
                 logger.error("无法创建API实例，操作取消")
                 return 1
+            
+            api = instance['api']
             
             # 进入API监控模式
             result = api_monitor(configer, logger, api)
@@ -276,63 +353,15 @@ def main():
             return 1
             
     except Exception as e:
-        logger.error(f"程序启动失败: {str(e)}")
+        try:
+            # 尝试获取logger实例记录错误
+            instance = get_instances('logger')
+            if instance:
+                logger = instance['logger']
+                logger.error(f"程序启动失败: {str(e)}")
+        except:
+            print(f"程序启动失败: {str(e)}")
         return 1
-
-def handle_config_command(args, configer, logger=None):
-    """处理配置相关命令"""
-    logger = logger or Factory.get_logger()
-    
-    if args.command == 'view':
-        if not configer.is_loaded():  # 使用方法检查配置状态
-            logger.error("错误: 配置未加载")
-            return 1
-            
-        if args.section and args.option:
-            value = configer.get_value(args.section, args.option)
-            if value is not None:
-                print(f"{args.section}.{args.option} = {value}")
-            else:
-                logger.error(f"错误: 配置项 {args.section}.{args.option} 不存在")
-                return 1
-        elif args.section:
-            section_data = configer.get_section(args.section)
-            if section_data:
-                print(f"[{args.section}]")
-                for option, value in section_data.items():
-                    print(f"{option} = {value}")
-            else:
-                logger.error(f"错误: 配置部分 {args.section} 不存在")
-                return 1
-        else:
-            configer.print_config()  # 使用配置管理器的方法
-    
-    elif args.command == 'set':
-        if configer.set_value(args.section, args.option, args.value):
-            logger.info(f"成功: 已设置 {args.section}.{args.option} = {args.value}")
-        else:
-            logger.error(f"错误: 设置 {args.section}.{args.option} 失败")
-            return 1
-    
-    elif args.command == 'reset':
-        if not args.confirm:
-            logger.warning("警告: 此操作将重置所有配置为默认值。如果确认，请添加 --confirm 参数。")
-            return 1
-        
-        if configer.reset():  # 修改方法名
-            logger.info("成功: 配置已重置为默认值")
-        else:
-            logger.error("错误: 重置配置失败")
-            return 1
-    
-    elif args.command == 'reload':
-        if configer.reload():  # 添加重新加载方法
-            logger.info("成功: 配置已重新加载")
-        else:
-            logger.error("错误: 重新加载配置失败")
-            return 1
-    
-    return 0
 
 # 修改入口点
 if __name__ == "__main__":
