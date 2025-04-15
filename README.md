@@ -86,7 +86,7 @@ sudo python3 /tmp/install.sh
 |--------|------|--------|
 | LOG_LEVEL | 日志级别 | INFO |
 | LOG_RETENTION_DAYS | 日志保留天数 | 30 |
-| LOG_FILE | 日志文件路径 | error.log |
+| LOG_FILE | 日志文件路径 | info.log |
 | LOG_DIR | 日志目录路径 | logs |
 | LOG_FORMAT | 日志格式 | %(asctime)s - %(levelname)s - %(message)s |
 | LOG_SIZE | 日志文件大小限制（字节） | 10485760 |
@@ -284,9 +284,9 @@ sudo python3 /opt/safeline/scripts/autoblocker.py set GENERAL QUERY_INTERVAL 30
 
 7. **如何查看程序的运行日志？**
    
-程序的日志保存在 `/opt/safeline/scripts/logs/error.log` 文件中，可以使用以下命令查看：
+程序的日志保存在 `/opt/safeline/scripts/logs/info.log` 文件中，可以使用以下命令查看：
 ```bash
-sudo tail -f /opt/safeline/scripts/logs/error.log
+sudo tail -f /opt/safeline/scripts/logs/info.log
 ```
 
 8. **如何设置日志保留周期？**
