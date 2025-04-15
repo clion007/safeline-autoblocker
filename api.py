@@ -140,7 +140,7 @@ class SafeLineAPI:
             params['attack_type'] = attack_type
         
         try:
-            response = self.session.get(url, params=params, headers=headers)
+            response = self.session.get(url=url, params=params, headers=headers)
             if response.status_code == 200:
                 result = response.json()
                 data = result.get('data', {}).get('data', [])
@@ -189,7 +189,7 @@ class SafeLineAPI:
         }
         
         try:
-            response = self.session.put(url, headers=headers, json=data)
+            response = self.session.put(url=url, headers=headers, json=data)
             success = response.status_code == 200 and response.json().get('err') is None
             
             if success:
@@ -234,7 +234,7 @@ class SafeLineAPI:
         
         try:
             # 1. 首先获取所有IP组列表
-            response = self.session.get(url, headers=headers)
+            response = self.session.get(url=url, headers=headers)
             if response.status_code != 200:
                 self.get_logger().error(f"获取IP组列表失败: {response.status_code} - {response.text}")
                 return None
@@ -257,7 +257,7 @@ class SafeLineAPI:
             
             # 3. 获取指定ID的IP组详细信息
             detail_url = self._prepare_url(f"ipgroup/detail?id={target_group.get('id')}")
-            detail_response = self.session.get(detail_url, headers=headers)
+            detail_response = self.session.get(url=detail_url, headers=headers)
             
             if detail_response.status_code != 200:
                 self.get_logger().error(f"获取IP组详细信息失败: {detail_response.status_code} - {detail_response.text}")
