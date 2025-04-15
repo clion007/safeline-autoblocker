@@ -179,17 +179,17 @@ class SafeLineAPI:
         headers = self._prepare_headers()
         
         data = {
-            "id": group_id,
-            "comment": group_name,
-            "ips": current_ips,
-            "reference": "",
-            "builtin": "false",
+            "data": {
+                "id": group_id,
+                "comment": group_name,
+                "ips": current_ips,
+                "reference": "",
+                "builtin": False,
+            }
         }
-        # 数据序列化
-        data = json.dumps(data)
         
         try:
-            response = self.session.put(url, headers=headers, data=data)
+            response = self.session.put(url, headers=headers, json=data)
             success = response.status_code == 200 and response.json().get('err') is None
             
             if success:
