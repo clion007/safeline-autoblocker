@@ -149,6 +149,172 @@ class SafeLineAPI:
             self.get_logger().error(f"获取攻击日志异常: {str(error)}")
             return []
     
+    def add_ip_to_batch(self, ip, group_name):
+        """将IP添加到批处理队列"""
+        self.get_logger().debug(f"尝试将IP {ip} 添加到组 '{group_name}'")
+        
+        # 检查缓存中是否已添加该IP
+        cache_key = f"{ip}_{group_name}"
+        if cache_key in self.added_ips_cache:
+            self.get_logger().debug(f"IP {ip} 已在缓存中，跳过添加")
+            return True
+    
+        # 获取IP组信息并检查IP是否已存在
+        group_info = self._get_ip_group_info(group_name)
+        if group_info and ip in group_info.get('ips', []):
+            self.get_logger().debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
+            return True
+        
+        # 添加到批处理队列
+        if group_name not in self.ip_batch_queue:
+            self.ip_batch_queue[group_name] = []
+        
+        self.ip_batch_queue[group_name].append(ip)
+        self.get_logger().debug(f"IP {ip} 已添加到组 '{group_name}' 的处理队列")
+        return True
+    
+    def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
+        """更新IP组，添加新IP"""
+        url = self._prepare_url(f'ipgroup/detail?id={group_id}')
+        headers = self._prepare_headers()
+        
+        data = {
+            "id": group_id,
+            "comment": group_name,
+            "reference": "",
+            "ips": current_ips,
+            "builtin": False
+        }
+        
+        try:
+            response = self.session.put(url, headers=headers, json=data)
+            success = response.status_code == 200 and response.json().get('err') is None
+            
+            if success:
+                if len(new_ips) == 1:
+                    self.get_logger().info(f"成功添加IP {new_ips[0]} 到组 '{group_name}'")
+                else:
+                    self.get_logger().info(f"成功批量添加 {len(new_ips)} 个IP到组 '{group_name}'")
+                
+                # 更新缓存
+                for ip in new_ips:
+                    cache_key = f"{ip}_{group_name}"
+                    self.added_ips_cache[cache_key] = datetime.now()
+                
+                return True
+            else:
+                if len(new_ips) == 1:
+                    self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 失败: {response.text}")
+                else:
+                    self.get_logger().error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
+                return False
+                
+        except Exception as error:
+            if len(new_ips) == 1:
+                self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 时出错: {str(error)}")
+            else:
+                self.get_logger().error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
+            return False
+    
+    def _get_ip_group_info(self, group_name):
+        """获取IP组信息，使用缓存减少API请求"""
+        # 检查缓存是否有效
+        current_time = datetime.now()
+        cache_clean_interval = int(self.get_configer().get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
+        if (self.ip_groups_cache_time is not None and 
+            (current_time - self.ip_groups_cache_time).total_seconds() < cache_clean_interval and
+            group_name in self.ip_groups_cache):
+            return self.ip_groups_cache[group_name]
+        
+        # 缓存无效，重新获取所有IP组
+        url = self._prepare_url('ipgroup')
+        headers = self._prepare_headers()
+        
+        try:
+            # 1. 首先获取所有IP组列表
+            response = self.session.get(url, headers=headers)
+            if response.status_code != 200:
+                self.get_logger().error(f"获取IP组列表失败: {response.status_code} - {response.text}")
+                return None
+            
+            result = response.json()
+            if 'data' not in result or 'nodes' not in result['data']:
+                self.get_logger().error("IP组数据格式不正确")
+                return None
+            
+            # 2. 查找目标IP组
+            target_group = None
+            for group in result['data']['nodes']:
+                if group.get('comment') == group_name:
+                    target_group = group
+                    break
+                    
+            if not target_group:
+                self.get_logger().error(f"未找到名为 {group_name} 的IP组")
+                return None
+            
+            # 3. 获取指定ID的IP组详细信息
+            detail_url = self._prepare_url(f"ipgroup/detail?id={target_group.get('id')}")
+            detail_response = self.session.get(detail_url, headers=headers)
+            
+            if detail_response.status_code != 200:
+                self.get_logger().error(f"获取IP组详细信息失败: {detail_response.status_code} - {detail_response.text}")
+                return None
+            
+            detail_result = detail_response.json()
+            if not detail_result.get('data') or not detail_result['data'].get('data'):
+                self.get_logger().error("IP组详细信息格式不正确")
+                return None
+            
+            # 4. 使用详细信息更新缓存
+            group_info = detail_result['data']['data']
+            self.ip_groups_cache[group_name] = group_info
+            self.ip_groups_cache_time = current_time
+            
+            return group_info
+                
+        except Exception as error:
+            self.get_logger().error(f"获取IP组信息异常: {str(error)}")
+            return None
+    
+    def process_ip_batch(self):
+        """处理IP批处理队列"""
+        if not self.ip_batch_queue:
+            return
+        
+        self.get_logger().debug(f"开始处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
+        
+        for group_name, ip_list in self.ip_batch_queue.items():
+            if not ip_list:
+                continue
+                
+            # 获取IP组信息
+            group_info = self._get_ip_group_info(group_name)
+            if not group_info:
+                self.get_logger().error(f"未找到IP组 '{group_name}'，跳过添加IP")
+                continue
+            
+            group_id = group_info.get('id')
+            current_ips = group_info.get('ips', []).copy()
+            
+            # 修改：直接使用 IP 列表
+            new_ips = []
+            for ip in ip_list:
+                if ip not in current_ips:
+                    new_ips.append(ip)
+                    current_ips.append(ip)
+            
+            if not new_ips:
+                self.get_logger().debug(f"IP组 '{group_name}' 中没有新IP需要添加")
+                continue
+            
+            # 批量更新IP组
+            self._update_ip_group(group_id, group_name, current_ips, new_ips)
+        
+        # 清空队列
+        self.ip_batch_queue = {}
+        self.last_batch_process_time = time.time()
+    
     def process_attack_logs(self):
         """处理攻击日志并提取IP"""
         logs = self.get_attack_logs()
@@ -189,181 +355,6 @@ class SafeLineAPI:
         
         return queued_count
     
-    def add_ip_to_batch(self, ip, group_name):
-        """将IP添加到批处理队列"""
-        
-        # 检查缓存中是否已添加该IP
-        cache_key = f"{ip}_{group_name}"
-        if cache_key in self.added_ips_cache:
-            return True
-
-        if group_name not in self.ip_batch_queue:
-            self.ip_batch_queue[group_name] = []
-        
-        # 检查IP是否已在队列中
-        for item in self.ip_batch_queue[group_name]:
-            if item['ip'] == ip:
-                return
-        
-        # 检查IP是否已在目标IP组中
-        group_info = self._get_ip_group_info(group_name)
-        if group_info and 'ips' in group_info and ip in group_info.get('ips', []):
-            self.get_logger().debug(f"IP {ip} 已存在于组 '{group_name}' 中，跳过添加")
-            return
-        
-        # 添加新IP到队列
-        self.ip_batch_queue[group_name].append({
-            'ip': ip
-        })
-
-    def process_ip_batch(self):
-        """处理IP批处理队列"""
-        if not self.ip_batch_queue:
-            return
-        
-        # 修正：self.get_logger 应该是 self.get_logger()
-        self.get_logger().debug(f"开始处理IP，共 {sum(len(ips) for ips in self.ip_batch_queue.values())} 个IP")
-        
-        for group_name, ip_list in self.ip_batch_queue.items():
-            if not ip_list:
-                continue
-                
-            # 获取IP组信息
-            group_info = self._get_ip_group_info(group_name)
-            if not group_info:
-                # 修正：self.get_logger 应该是 self.get_logger()
-                self.get_logger().error(f"未找到IP组 '{group_name}'，跳过添加IP")
-                continue
-            
-            group_id = group_info.get('id')
-            current_ips = group_info.get('ips', []).copy()
-            
-            # 筛选出需要添加的IP
-            new_ips = []
-            for item in ip_list:
-                ip = item['ip']
-                if ip not in current_ips:
-                    new_ips.append(ip)
-                    current_ips.append(ip)
-                else:
-                    # IP已存在，更新缓存
-                    cache_key = f"{ip}_{group_name}"
-                    self.added_ips_cache[cache_key] = datetime.now()
-            
-            if not new_ips:
-                self.get_logger.debug(f"IP组 '{group_name}' 中没有新IP需要添加")
-                continue
-            
-            # 批量更新IP组
-            self._update_ip_group(group_id, group_name, current_ips, new_ips)
-        
-        # 清空队列
-        self.ip_batch_queue = {}
-        self.last_batch_process_time = time.time()
-    
-    def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
-        """更新IP组，添加新IP"""
-        url = self._prepare_url('ipgroup')
-        headers = self._prepare_headers()
-        
-        data = {
-            "id": group_id,
-            "comment": group_name,
-            "reference": "",
-            "ips": current_ips
-        }
-        
-        try:
-            response = self.session.put(url, headers=headers, json=data)
-            success = response.status_code == 200 and response.json().get('err') is None
-            
-            if success:
-                if len(new_ips) == 1:
-                    self.get_logger().info(f"成功添加IP {new_ips[0]} 到组 '{group_name}'")
-                else:
-                    self.get_logger().info(f"成功批量添加 {len(new_ips)} 个IP到组 '{group_name}'")
-                
-                # 更新缓存
-                for ip in new_ips:
-                    cache_key = f"{ip}_{group_name}"
-                    self.added_ips_cache[cache_key] = datetime.now()
-                return True
-            else:
-                if len(new_ips) == 1:
-                    # 修正：self.get_logger 应该是 self.get_logger()
-                    self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 失败: {response.text}")
-                else:
-                    # 修正：self.get_logger 应该是 self.get_logger()
-                    self.get_logger().error(f"批量添加IP到组 '{group_name}' 失败: {response.text}")
-                return False
-        except Exception as error:
-            if len(new_ips) == 1:
-                # 修正：self.get_logger 应该是 self.get_logger()
-                self.get_logger().error(f"添加IP {new_ips[0]} 到组 '{group_name}' 时出错: {str(error)}")
-            else:
-                # 修正：self.get_logger 应该是 self.get_logger()
-                self.get_logger().error(f"批量添加IP到组 '{group_name}' 时出错: {str(error)}")
-            return False
-    
-    def _get_ip_group_info(self, group_name):
-        """获取IP组信息，使用缓存减少API请求"""
-        # 检查缓存是否有效
-        current_time = datetime.now()
-        cache_clean_interval = int(self.get_configer().get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
-        if (self.ip_groups_cache_time is not None and 
-            (current_time - self.ip_groups_cache_time).total_seconds() < cache_clean_interval and
-            group_name in self.ip_groups_cache):
-            return self.ip_groups_cache[group_name]
-        
-        # 缓存无效，重新获取所有IP组
-        url = self._prepare_url('ipgroup')
-        headers = self._prepare_headers()
-        
-        try:
-            response = self.session.get(url, headers=headers)
-            if response.status_code != 200:
-                self.get_logger().error(f"获取IP组列表失败: {response.status_code} - {response.text}")
-                return None
-            
-            result = response.json()
-            if 'data' not in result or 'nodes' not in result['data']:
-                self.get_logger().error("IP组数据格式不正确")
-                return None
-            
-            # 更新缓存
-            self.ip_groups_cache = {}
-            self.ip_groups_cache_time = current_time
-            
-            # 查找目标IP组
-            target_group = None
-            for group in result['data']['nodes']:
-                if group.get('comment') == group_name:
-                    target_group = group
-                    break
-                    
-            if not target_group:
-                self.get_logger().error(f"未找到名为 {group_name} 的IP组")
-                return None
-                
-            # 获取详细信息
-            detail_url = self._prepare_url(f"ipgroup/detail?id={target_group.get('id')}")
-            detail_response = self.session.get(detail_url, headers=headers)
-            
-            if detail_response.status_code == 200:
-                detail_result = detail_response.json()
-                if 'data' in detail_result and 'data' in detail_result['data']:
-                    group_info = detail_result['data']['data']
-                    self.ip_groups_cache[group_name] = group_info
-                    return group_info
-            
-            # 如果无法获取详细信息，使用基本信息
-            self.ip_groups_cache[group_name] = target_group
-            return target_group
-                
-        except Exception as error:
-            self.get_logger().error(f"获取IP组信息异常: {str(error)}")
-            return None
-    
     def clean_cache(self):
         """清理过期的IP缓存"""
         cache_clean_interval = int(self.get_configer().get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
@@ -380,5 +371,4 @@ class SafeLineAPI:
             del self.added_ips_cache[key]
         
         if expired_keys:
-            # 修正：self.get_logger 应该是 self.get_logger()
             self.get_logger().debug(f"已清理 {len(expired_keys)} 个过期IP缓存项")
