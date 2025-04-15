@@ -379,7 +379,7 @@ EOF
     cat > "$LOG_CONFIG_FILE" << EOF
 # 日志配置文件
 log_dir: logs
-log_file: error.log
+log_file: info.log
 log_level: $log_level
 max_size: 10485760
 backup_count: 5
@@ -419,10 +419,6 @@ WorkingDirectory=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$INSTALL_DIR
 Environment=CONFIG_DIR=$CONFIG_DIR
-
-# 设置日志输出
-StandardOutput=append:$INSTALL_DIR/logs/info.log
-StandardError=append:$INSTALL_DIR/logs/error.log
 
 # 设置PID文件
 RuntimeDirectory=safeline
