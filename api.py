@@ -149,6 +149,7 @@ class SafeLineAPI:
     
     def add_ip_to_batch(self, ip, group_name):
         """将IP添加到批处理队列"""
+        
         self.get_logger().debug(f"尝试将IP {ip} 添加到组 '{group_name}'")
         
         # 检查缓存中是否已添加该IP
@@ -212,7 +213,7 @@ class SafeLineAPI:
 
                 # 更新IP组缓存
                 if group_name in self.ip_groups_cache:
-                    self.ip_groups_cache[group_name]['ips'] = update_ips
+                    self.ip_groups_cache[group_name]['ips'] = current_ips
                 
                 return True
             else:
@@ -231,6 +232,7 @@ class SafeLineAPI:
     
     def _get_ip_group_info(self, group_name):
         """获取IP组信息，使用缓存减少API请求"""
+        
         # 检查缓存是否有效
         current_time = datetime.now()
         cache_clean_interval = int(self.get_configer().get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
@@ -350,23 +352,30 @@ class SafeLineAPI:
             if not ip:
                 continue
                 
-            attack_type = str(log_entry.get('attack_type'))
+            attack_type = log_entry.get('attack_type')
+            self.get_logger().debug(f"原始攻击类型值: {attack_type}, 类型: {type(attack_type)}")
             
             # 获取攻击类型过滤配置
             attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
+            self.get_logger().debug(f"过滤配置值: {attack_types_filter}")
             
             # 检查攻击类型过滤
             if attack_types_filter:
-                filter_types = [t.strip() for t in attack_types_filter.split(',')]
-                # 将攻击类型转换为整数进行比较
                 try:
-                    attack_type_int = int(attack_type)
-                    filter_types_int = [int(t) for t in filter_types]
-                    if attack_type_int in filter_types_int:
-                        self.get_logger().debug(f"跳过攻击类型 {attack_type} 的IP {ip}")
+                    if not attack_type:
+                        self.get_logger().error("攻击类型为空")
                         continue
-                except ValueError:
-                    self.get_logger().error(f"无效的攻击类型值: {attack_type}")
+                        
+                    attack_type_int = int(attack_type)
+                    filter_types_int = [int(t) for t in attack_types_filter.split(',') if t]
+                    
+                    self.get_logger().debug(f"转换后的攻击类型: {attack_type_int}, 过滤列表: {filter_types_int}")
+                    
+                    if attack_type_int in filter_types_int:
+                        self.get_logger().debug(f"跳过攻击类型 {attack_type_int} 的IP {ip}")
+                        continue
+                except ValueError as e:
+                    self.get_logger().error(f"无效的攻击类型值: {attack_type}, 错误: {str(e)}")
                     continue
                 
             # 获取对应的IP组

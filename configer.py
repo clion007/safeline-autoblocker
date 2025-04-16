@@ -135,9 +135,12 @@ class ConfigManager:
         """
         try:
             value = self._config.get(section, option)
-            
+            if value:
+                # 移除引号和多余空格
+                value = value.strip().strip('"\'').strip()
             if option in {'SAFELINE_PORT', 'QUERY_INTERVAL', 'MAX_LOGS_PER_QUERY'}:
                 return int(value)
+                
             return value
                 
         except Exception as error:
