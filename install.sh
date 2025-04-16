@@ -365,8 +365,8 @@ MAX_LOGS_PER_QUERY = $max_logs
 # 每次查询最大页数
 MAX_PAGES_PER_QUERY = $max_pages
 
-# 攻击类型过滤（默认过滤黑名单攻击）
-ATTACK_TYPES_FILTER = "-3"
+# 只拦截指定攻击类型id，多个用逗号分隔，留空则拦截所有攻击
+ATTACK_TYPES_FILTER = ""
 
 [MAINTENANCE]
 # 缓存清理间隔(秒)

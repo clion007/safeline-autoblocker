@@ -372,6 +372,11 @@ class SafeLineAPI:
             attack_type = log_entry.get('attack_type')
             self.get_logger().debug(f"原始攻击类型值: {attack_type}, 类型: {type(attack_type)}")
             
+            # 过滤掉黑名单类型(id=-3)的记录
+            if attack_type == -3 or attack_type == '-3':
+                self.get_logger().debug(f"跳过黑名单类型(id=-3)的IP {ip}")
+                continue
+                
             # 获取攻击类型过滤配置
             attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
             self.get_logger().debug(f"过滤配置值: {attack_types_filter}")
@@ -388,7 +393,7 @@ class SafeLineAPI:
                     
                     self.get_logger().debug(f"转换后的攻击类型: {attack_type_int}, 过滤列表: {filter_types_int}")
                     
-                    if attack_type_int in filter_types_int:
+                    if attack_type_int not in filter_types_int:
                         self.get_logger().debug(f"跳过攻击类型 {attack_type_int} 的IP {ip}")
                         continue
                 except ValueError as e:

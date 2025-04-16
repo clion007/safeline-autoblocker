@@ -28,7 +28,7 @@ class ConfigManager:
             'QUERY_INTERVAL': '60',
             'MAX_LOGS_PER_QUERY': '100',  # 每页最大日志数量（雷池API限制最大100）
             'MAX_PAGES_PER_QUERY': '5',   # 每次查询的最大页数
-            'ATTACK_TYPES_FILTER': '-3',   # 默认过滤黑名单类型
+            'ATTACK_TYPES_FILTER': '',   # 指定仅拦截的攻击类型id，多个id用逗号分隔，留空则拦截所有攻击
         },
         'MAINTENANCE': {
             'CACHE_CLEAN_INTERVAL': '3600'
