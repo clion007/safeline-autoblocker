@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from version import PROGRAM_NAME, get_version_string
 
 
-def perform_log_maintenance(current_time, last_times, configer, api, logger_manager, logger):
+def perform_log_maintenance(current_time, last_times, configer, api, logger):
     """集中处理日志维护任务"""    
     
     # 检查是否需要清理缓存
@@ -31,6 +31,7 @@ def perform_log_maintenance(current_time, last_times, configer, api, logger_mana
         last_times['cache_clean'] = current_time
     
     # 检查是否需要清理日志
+    logger_manager = Factory.get_logger_manager()
     log_retention_days = int(logger_manager.get_config("retention_days"))
     log_clean_interval = int(logger_manager.get_config("clean_interval"))
     
