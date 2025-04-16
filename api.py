@@ -179,14 +179,11 @@ class SafeLineAPI:
         data = {
             "id": group_id,
             "comment": group_name,
-            "ips": current_ips,
-            "reference": "",
-            "builtin": "false"
+            "ips": current_ips
         }
         
         try:
-            import json
-            response = self.session.put(url=url, headers=headers, data=json.dumps(data))
+            response = self.session.put(url=url, headers=headers, json=data)
             success = response.status_code == 200 and response.json().get('err') is None
             
             if success:
