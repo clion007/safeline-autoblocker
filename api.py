@@ -171,7 +171,7 @@ class SafeLineAPI:
         self.get_logger().debug(f"IP {ip} 已添加到组 '{group_name}' 的处理队列")
         return True
     
-    def _update_ip_group(self, group_id, group_name, update_ips, new_ips):
+    def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
         """更新IP组，添加新IP"""
         url = self._prepare_url(f'ipgroup')
         headers = self._prepare_headers()
@@ -179,11 +179,13 @@ class SafeLineAPI:
         data = {
             "id": group_id,
             "comment": group_name,
-            "ips": update_ips
+            "ips": current_ips
         }
         
         try:
+            self.get_logger().debug(f"发送更新请求: {data}")
             response = self.session.put(url=url, headers=headers, json=data)
+            self.get_logger().debug(f"API响应: {response.text}")
             
             if response.status_code != 200:
                 self.get_logger().error(f"API请求失败: {response.status_code} - {response.text}")
@@ -311,17 +313,22 @@ class SafeLineAPI:
             group_id = group_info.get('id')
             current_ips = group_info.get('ips', []).copy()
             
-            # 建议修改为
-            new_ips = list(set(ip_list) - set(current_ips))
-            current_ips.extend(new_ips)
-            update_ips = list(set(current_ips))
+            # 修改为
+            new_ips = []
+            for ip in ip_list:
+                if ip not in current_ips:
+                    new_ips.append(ip)
+                    current_ips.append(ip)
             
             if not new_ips:
                 self.get_logger().debug(f"IP组 '{group_name}' 中没有新IP需要添加")
                 continue
             
+            self.get_logger().debug(f"准备添加新IP: {new_ips}")
+            self.get_logger().debug(f"当前IP组 '{group_name}' 的IP列表: {current_ips}")
+
             # 批量更新IP组
-            self._update_ip_group(group_id, group_name, update_ips, new_ips)
+            self._update_ip_group(group_id, group_name, current_ips, new_ips)
         
         # 清空队列
         self.ip_batch_queue = {}
@@ -349,8 +356,12 @@ class SafeLineAPI:
             attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
             
             # 检查攻击类型过滤
-            if attack_types_filter and attack_type not in attack_types_filter.split(','):
-                continue
+            attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
+            if attack_types_filter:
+                filter_types = [t.strip() for t in attack_types_filter.split(',')]
+                if attack_type not in filter_types:
+                    self.get_logger().debug(f"跳过攻击类型 {attack_type} 的IP {ip}")
+                    continue
                 
             # 获取对应的IP组
             ip_group = self.get_configer().get_ip_group_for_attack_type(attack_type)
@@ -371,6 +382,13 @@ class SafeLineAPI:
         """清理过期的IP缓存"""
         cache_clean_interval = int(self.get_configer().get_value('MAINTENANCE', 'CACHE_CLEAN_INTERVAL'))
         current_time = datetime.now()
+        
+        # 清理IP组缓存
+        if (self.ip_groups_cache_time is not None and 
+            (current_time - self.ip_groups_cache_time).total_seconds() > cache_clean_interval):
+            self.ip_groups_cache = {}
+            self.ip_groups_cache_time = None
+            self.get_logger().debug("已清理IP组缓存")
         expired_keys = []
         
         # 清理已添加IP缓存
