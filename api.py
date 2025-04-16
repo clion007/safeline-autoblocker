@@ -234,6 +234,9 @@ class SafeLineAPI:
                 return None
             
             result = response.json()
+            if result.get('err'):
+                self.get_logger().error(f"API返回错误: {result.get('err')} - {result.get('msg')}")
+                return None
             if 'data' not in result or 'nodes' not in result['data']:
                 self.get_logger().error("IP组数据格式不正确")
                 return None
