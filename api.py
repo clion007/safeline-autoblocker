@@ -356,11 +356,17 @@ class SafeLineAPI:
             attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
             
             # 检查攻击类型过滤
-            attack_types_filter = self.get_configer().get_value('GENERAL', 'ATTACK_TYPES_FILTER')
             if attack_types_filter:
                 filter_types = [t.strip() for t in attack_types_filter.split(',')]
-                if attack_type not in filter_types:
-                    self.get_logger().debug(f"跳过攻击类型 {attack_type} 的IP {ip}")
+                # 将攻击类型转换为整数进行比较
+                try:
+                    attack_type_int = int(attack_type)
+                    filter_types_int = [int(t) for t in filter_types]
+                    if attack_type_int in filter_types_int:
+                        self.get_logger().debug(f"跳过攻击类型 {attack_type} 的IP {ip}")
+                        continue
+                except ValueError:
+                    self.get_logger().error(f"无效的攻击类型值: {attack_type}")
                     continue
                 
             # 获取对应的IP组
