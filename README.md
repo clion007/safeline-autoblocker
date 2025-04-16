@@ -73,7 +73,8 @@ sudo python3 /tmp/install.sh
 | HIGH_RISK_IP_GROUP | 高危IP组名称 | 黑名单 |
 | LOW_RISK_IP_GROUP | 低危IP组名称 | 人机验证 |
 | QUERY_INTERVAL | API查询间隔（秒） | 60 |
-| MAX_LOGS_PER_QUERY | 每次查询的最大日志数量 | 100 |
+| MAX_LOGS_PER_QUERY | 每页查询的最大日志数量（最大100） | 100 |
+| MAX_PAGES_PER_QUERY | 每次查询的最大页数 | 5 |
 | ATTACK_TYPES_FILTER | 攻击类型过滤，多个ID用逗号分隔 | -3 (默认过滤黑名单类型) |
 | CACHE_CLEAN_INTERVAL | 缓存清理间隔（秒） | 3600 |
 | LOG_CLEAN_INTERVAL | 日志清理间隔（秒） | 86400 |

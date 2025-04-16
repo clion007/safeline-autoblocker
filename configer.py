@@ -26,8 +26,9 @@ class ConfigManager:
             'HIGH_RISK_IP_GROUP': '黑名单',
             'LOW_RISK_IP_GROUP': '人机验证',
             'QUERY_INTERVAL': '60',
-            'MAX_LOGS_PER_QUERY': '100',
-            'ATTACK_TYPES_FILTER': '-3',     # 默认过滤黑名单类型
+            'MAX_LOGS_PER_QUERY': '100',  # 每页最大日志数量（雷池API限制最大100）
+            'MAX_PAGES_PER_QUERY': '5',   # 每次查询的最大页数
+            'ATTACK_TYPES_FILTER': '-3',   # 默认过滤黑名单类型
         },
         'MAINTENANCE': {
             'CACHE_CLEAN_INTERVAL': '3600'

@@ -125,24 +125,41 @@ class SafeLineAPI:
         url = self._prepare_url('records')
         headers = self._prepare_headers()
         
-        # 从配置中获取每次查询的日志数量
-        max_logs = self.get_configer().get_value('GENERAL', 'MAX_LOGS_PER_QUERY')
+        # 从配置中获取查询参数
+        max_logs_per_page = min(int(self.get_configer().get_value('GENERAL', 'MAX_LOGS_PER_QUERY')), 100)
+        max_pages = int(self.get_configer().get_value('GENERAL', 'MAX_PAGES_PER_QUERY'))
         
-        # 使用page和page_size参数获取最新的日志
-        params = {
-            'page': 1,
-            'page_size': max_logs
-        }
-        
-        if attack_type:
-            params['attack_type'] = attack_type
+        all_logs = []
         
         try:
-            response = self.session.get(url=url, params=params, headers=headers)
-            if response.status_code == 200:
+            # 分页获取日志
+            for page in range(1, max_pages + 1):
+                params = {
+                    'page': page,
+                    'page_size': max_logs_per_page
+                }
+                
+                if attack_type:
+                    params['attack_type'] = attack_type
+                
+                self.get_logger().debug(f"获取第 {page} 页日志，每页 {max_logs_per_page} 条")
+                response = self.session.get(url=url, params=params, headers=headers)
+                
+                if response.status_code != 200:
+                    self.get_logger().error(f"获取日志失败: {response.status_code} - {response.text}")
+                    break
+                    
                 result = response.json()
                 data = result.get('data', {}).get('data', [])
-                return data
+                
+                if not data:  # 如果没有更多数据，提前退出
+                    break
+                    
+                all_logs.extend(data)
+                self.get_logger().debug(f"已获取 {len(all_logs)} 条日志")
+            
+            return all_logs
+            
         except Exception as error:
             self.get_logger().error(f"获取攻击日志异常: {str(error)}")
             return []

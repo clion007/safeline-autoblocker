@@ -293,7 +293,8 @@ create_config() {
     echo -e "\n${BLUE}性能配置:${NC}"
     echo "------------------------------------------------"
     local query_interval=$(get_user_input "API查询间隔（秒）" "60" "false")
-    local max_logs=$(get_user_input "每次查询最大日志数量" "100" "false")
+    local max_logs=$(get_user_input "每页查询最大日志数量" "100" "false")
+    local max_pages=$(get_user_input "每次查询日志最大页数" "5" "false")
     local log_retention_days=$(get_user_input "日志保留天数（0表示永久保留）" "30" "false")
     
     # 日志级别选择
@@ -351,8 +352,11 @@ LOW_RISK_IP_GROUP = "$low_risk_ip_group"
 # 查询间隔(秒)
 QUERY_INTERVAL = $query_interval
 
-# 每次查询最大日志数量
+# 每页查询最大日志数量
 MAX_LOGS_PER_QUERY = $max_logs
+
+# 每次查询最大页数
+MAX_PAGES_PER_QUERY = $max_pages
 
 # 攻击类型过滤（默认过滤黑名单攻击）
 ATTACK_TYPES_FILTER = "-3"
