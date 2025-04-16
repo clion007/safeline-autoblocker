@@ -171,7 +171,7 @@ class SafeLineAPI:
         self.get_logger().debug(f"IP {ip} 已添加到组 '{group_name}' 的处理队列")
         return True
     
-    def _update_ip_group(self, group_id, group_name, current_ips, new_ips):
+    def _update_ip_group(self, group_id, group_name, update_ips, new_ips):
         """更新IP组，添加新IP"""
         url = self._prepare_url(f'ipgroup')
         headers = self._prepare_headers()
@@ -179,11 +179,22 @@ class SafeLineAPI:
         data = {
             "id": group_id,
             "comment": group_name,
-            "ips": current_ips
+            "ips": update_ips
         }
         
         try:
             response = self.session.put(url=url, headers=headers, json=data)
+            
+            if response.status_code != 200:
+                self.get_logger().error(f"API请求失败: {response.status_code} - {response.text}")
+                return False
+
+            result = response.json()
+                
+            if result.get('err'):
+                self.get_logger().error(f"API返回错误: {result.get('err')} - {result.get('msg')}")
+                return False
+
             success = response.status_code == 200 and response.json().get('err') is None
             
             if success:
@@ -196,6 +207,10 @@ class SafeLineAPI:
                 for ip in new_ips:
                     cache_key = f"{ip}_{group_name}"
                     self.added_ips_cache[cache_key] = datetime.now()
+
+                # 更新IP组缓存
+                if group_name in self.ip_groups_cache:
+                    self.ip_groups_cache[group_name]['ips'] = update_ips
                 
                 return True
             else:
@@ -296,19 +311,17 @@ class SafeLineAPI:
             group_id = group_info.get('id')
             current_ips = group_info.get('ips', []).copy()
             
-            # 修改：直接使用 IP 列表
-            new_ips = []
-            for ip in ip_list:
-                if ip not in current_ips:
-                    new_ips.append(ip)
-                    current_ips.append(ip)
+            # 建议修改为
+            new_ips = list(set(ip_list) - set(current_ips))
+            current_ips.extend(new_ips)
+            update_ips = list(set(current_ips))
             
             if not new_ips:
                 self.get_logger().debug(f"IP组 '{group_name}' 中没有新IP需要添加")
                 continue
             
             # 批量更新IP组
-            self._update_ip_group(group_id, group_name, current_ips, new_ips)
+            self._update_ip_group(group_id, group_name, update_ips, new_ips)
         
         # 清空队列
         self.ip_batch_queue = {}
