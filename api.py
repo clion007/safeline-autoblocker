@@ -3,9 +3,7 @@
 """
 API交互模块
 """
-from socketserver import BaseRequestHandler
 import time
-import token
 import requests
 import warnings
 from datetime import datetime
