@@ -372,7 +372,7 @@ class SafeLineAPI:
             attack_type = log_entry.get('attack_type')
             self.get_logger().debug(f"原始攻击类型值: {attack_type}, 类型: {type(attack_type)}")
             
-            # 过滤掉黑名单类型(id=-3)的记录
+            # 过滤掉黑名单(id=-3)的记录
             if attack_type == -3 or attack_type == '-3':
                 self.get_logger().debug(f"跳过黑名单类型(id=-3)的IP {ip}")
                 continue
