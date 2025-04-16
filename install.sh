@@ -372,9 +372,6 @@ ATTACK_TYPES_FILTER = "-3"
 # 缓存清理间隔(秒)
 CACHE_CLEAN_INTERVAL = 3600
 
-# 日志清理间隔(秒)
-LOG_CLEAN_INTERVAL = 86400
-
 [TYPE_GROUP]
 # 高危攻击类型
 HIGH_RISK_TYPES = "0,5,7,8,9,11,29"  # SQL注入,后门,代码执行,代码注入,命令注入,文件包含,模板注入
@@ -396,6 +393,7 @@ max_size: 10485760
 backup_count: 5
 log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 retention_days: $log_retention_days
+clean_interval: 86400
 EOF
     
     chmod 600 "$LOG_CONFIG_FILE"
