@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # SafeLine AutoBlocker 卸载脚本
-# 版本: 1.2.0
+# 版本: 2.0.0
 # 作者: Clion Nieh
-# 日期: 2025.4.6
+# 日期: 2025.4.16
 # 许可证: MIT
 
 # 打印横幅
@@ -12,7 +12,7 @@ echo "
 ║                                               ║
 ║       SafeLine AutoBlocker 卸载程序           ║
 ║                                               ║
-║       版本: 1.2.0                             ║
+║       版本: 2.0.0                             ║
 ║       作者: Clion Nieh                        ║
 ║                                               ║
 ╚═══════════════════════════════════════════════╝
@@ -113,9 +113,16 @@ remove_symlink || symlink_removed=false
 config_removed=true
 remove_config || config_removed=false
 
-# 删除安装目录下的所有文件
+# 删除安装目录下的所有文件（除了当前脚本）
 if [ -d "$INSTALL_DIR" ]; then
-    rm -rf "${INSTALL_DIR:?}"/* 2>/dev/null && script_removed=true || script_removed=false
+    # 获取当前脚本的绝对路径
+    CURRENT_SCRIPT=$(readlink -f "$0")
+    
+    # 删除安装目录下除当前脚本外的所有文件
+    find "$INSTALL_DIR" -type f -not -path "$CURRENT_SCRIPT" -delete && script_removed=true || script_removed=false
+    find "$INSTALL_DIR" -type d -empty -delete 2>/dev/null  # 删除空目录
+else
+    script_removed=true
 fi
 
 # 卸载结果反馈
@@ -134,19 +141,36 @@ fi
 # 获取父目录路径
 PARENT_DIR=$(dirname "$INSTALL_DIR")
 
-# 删除安装目录及卸载脚本自身
-if [ -d "$INSTALL_DIR" ]; then
-    echo "删除安装目录: $INSTALL_DIR"
-    
-    # 如果父目录为空，准备删除
-    if [ -d "$PARENT_DIR" ] && [ "$(ls -A "$PARENT_DIR" 2>/dev/null | grep -v "$(basename "$0")")" = "" ]; then
-        echo "父目录为空，将在脚本结束后删除"
-        (sleep 1; rm -f "$0"; rmdir "$PARENT_DIR" 2>/dev/null) &
-    else
-        # 仅删除卸载脚本
-        (sleep 1; rm -f "$0") &
-    fi
-fi
+# 创建一个临时清理脚本，在卸载脚本退出后执行
+TEMP_CLEANUP_SCRIPT=$(mktemp)
+cat > "$TEMP_CLEANUP_SCRIPT" << 'EOF'
+#!/bin/bash
+# 等待原脚本退出
+sleep 2
+
+# 删除卸载脚本
+SCRIPT_PATH="$1"
+INSTALL_DIR="$2"
+PARENT_DIR="$3"
+
+# 删除卸载脚本
+[ -f "$SCRIPT_PATH" ] && rm -f "$SCRIPT_PATH"
+
+# 删除安装目录（如果为空）
+[ -d "$INSTALL_DIR" ] && rmdir "$INSTALL_DIR" 2>/dev/null
+
+# 删除父目录（如果为空）
+[ -d "$PARENT_DIR" ] && rmdir "$PARENT_DIR" 2>/dev/null
+
+# 删除临时脚本自身
+rm -f "$0"
+EOF
+
+# 设置临时脚本权限
+chmod +x "$TEMP_CLEANUP_SCRIPT"
+
+# 后台运行临时清理脚本
+"$TEMP_CLEANUP_SCRIPT" "$0" "$INSTALL_DIR" "$PARENT_DIR" &
 
 echo "卸载完成，脚本将自动退出..."
 exit 0
