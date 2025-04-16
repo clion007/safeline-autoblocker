@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # SafeLine AutoBlocker 安装脚本
-# 版本: 1.3.0
+# 版本: 2.0.0
 # 作者: Clion Nieh
-# 日期: 2025.4.13
+# 日期: 2025.4.16
 # 许可证: MIT
 
 # 定义颜色
@@ -34,7 +34,7 @@ print_banner() {
     ║                                               ║
     ║       SafeLine AutoBlocker 安装程序           ║
     ║                                               ║
-    ║       版本: 1.3.0                             ║
+    ║       版本: 2.0.0                             ║
     ║       作者: Clion Nieh                        ║
     ║                                               ║
     ╚═══════════════════════════════════════════════╝${NC}
@@ -166,6 +166,13 @@ download_files() {
         # 设置执行权限（排除文档文件）
         if [ "$file" != "README.md" ] && [ "$file" != "LICENSE" ]; then
             chmod 755 "$destination"
+            # 为主脚本添加 shebang
+            if [ "$file" = "$MAIN_SCRIPT" ]; then
+                sed -i '1i#!/usr/bin/env python3' "$destination"
+                # 创建软链接
+                ln -sf "$INSTALL_DIR/$MAIN_SCRIPT" /usr/local/bin/safeline-ab
+                chmod 755 /usr/local/bin/safeline-ab
+            fi
         fi
     done
     
@@ -400,7 +407,7 @@ EOF
 # 创建服务
 create_service() {
     print_step 4 6 "创建系统服务"
-    
+        
     # 预先创建日志目录并设置权限
     mkdir -p "$INSTALL_DIR/logs"
     chown -R root:root "$INSTALL_DIR"
@@ -429,7 +436,7 @@ RuntimeDirectory=safeline
 PIDFile=/run/safeline/safeline-autoblocker.pid
 
 # 启动主程序
-ExecStart=/usr/bin/python3 $INSTALL_DIR/$MAIN_SCRIPT
+ExecStart=/usr/local/bin/safeline-ab
 Restart=on-failure
 RestartSec=30
 
@@ -510,6 +517,9 @@ cleanup_files() {
     # 删除服务文件
     [ -f "$SERVICE_FILE" ] && rm -f "$SERVICE_FILE" && systemctl daemon-reload
     
+    # 删除软链接
+    rm -f /usr/local/bin/safeline-ab
+
     # 删除配置文件和目录
     [ -d "$CONFIG_DIR" ] && rm -rf "$CONFIG_DIR"
     

@@ -6,10 +6,10 @@
 """
 
 # 版本信息
-VERSION = "1.3.0"
+VERSION = "2.0.0"
 PROGRAM_NAME = "SafeLine AutoBlocker"
 AUTHOR = "Clion Nieh"
-DATE = "2025.4.13"
+DATE = "2025.4.16"
 LICENSE = "MIT"
 
 # 获取完整版本字符串

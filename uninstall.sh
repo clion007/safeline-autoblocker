@@ -98,10 +98,18 @@ remove_config() {
     fi
 }
 
+# 删除软链接
+remove_symlink() {
+    if [ -L "/usr/local/bin/safeline-ab" ]; then
+        rm -f "/usr/local/bin/safeline-ab" && echo "删除软链接: safeline-ab" || echo "删除软链接失败"
+    fi
+}
+
 # 执行卸载步骤
 stop_service
 service_removed=true
 remove_service_file || service_removed=false
+remove_symlink || symlink_removed=false
 config_removed=true
 remove_config || config_removed=false
 
@@ -113,10 +121,11 @@ fi
 # 卸载结果反馈
 echo -e "\n卸载结果:"
 echo "服务文件: $([ "$service_removed" = true ] && echo '已删除' || echo '删除失败')"
+echo "软链接: $([ "$symlink_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "配置文件: $([ "$config_removed" = true ] && echo '已删除' || echo '删除失败')"
 echo "脚本文件: $([ "$script_removed" = true ] && echo '已删除' || echo '删除失败')"
 
-if [ "$service_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ]; then
+if [ "$service_removed" = true ] && [ "$symlink_removed" = true ] && [ "$config_removed" = true ] && [ "$script_removed" = true ]; then
     echo -e "\n✓ 卸载完成！所有组件已成功删除。"
 else
     echo -e "\n⚠ 卸载完成，但部分组件删除失败，请检查上述信息。"

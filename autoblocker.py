@@ -7,8 +7,8 @@ SafeLine AutoBlocker
 自动监控雷池WAF攻击日志并封禁攻击IP。
 
 作者: Clion Nieh
-版本: 1.3.0
-日期: 2025.4.13
+版本: 2.0.0
+日期: 2025.4.16
 许可证: MIT
 """
 
@@ -46,8 +46,19 @@ def parse_arguments():
     """解析命令行参数"""
     import argparse
     
-    # 创建参数解析器
-    parser = argparse.ArgumentParser(description=f'{PROGRAM_NAME} - 自动监控雷池WAF攻击日志并封禁攻击IP')
+    # 创建参数解析器，更新使用说明
+    parser = argparse.ArgumentParser(
+        description=f'{PROGRAM_NAME} - 自动监控雷池WAF攻击日志并封禁攻击IP',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  safeline-ab                    # 启动监控模式
+  safeline-ab view              # 查看当前配置
+  safeline-ab set SECTION OPTION VALUE  # 设置配置项
+  safeline-ab log level INFO    # 设置日志级别
+  safeline-ab ip-group high-risk "黑名单"  # 设置高危IP组名称
+"""
+    )
     
     # 添加子命令
     subparsers = parser.add_subparsers(dest='command', help='可用命令')

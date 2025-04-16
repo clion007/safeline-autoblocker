@@ -99,17 +99,17 @@ SafeLine AutoBlocker 支持以下命令行参数：
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| view | 查看当前配置 | `python3 autoblocker.py view` |
-| set | 设置配置选项 | `python3 autoblocker.py set SECTION OPTION VALUE` |
-| reset | 重置为默认配置 | `python3 autoblocker.py reset --confirm` |
-| reload | 重新加载配置文件 | `python3 autoblocker.py reload` |
-| version | 显示版本信息 | `python3 autoblocker.py version` |
-| log level | 设置日志级别 | `python3 autoblocker.py log level INFO` |
-| log retention | 设置日志保留天数 | `python3 autoblocker.py log retention 30` |
-| log clean | 清理过期日志文件 | `python3 autoblocker.py log clean` |
-| ip-group high-risk | 设置高危IP组名称 | `python3 autoblocker.py ip-group high-risk 黑名单` |
-| ip-group low-risk | 设置低危IP组名称 | `python3 autoblocker.py ip-group low-risk 人机验证` |
-| ip-group map | 配置攻击类型与IP组的映射 | `python3 autoblocker.py ip-group map 0 high` |
+| view | 查看当前配置 | `safeline-ab view` |
+| set | 设置配置选项 | `safeline-ab set SECTION OPTION VALUE` |
+| reset | 重置为默认配置 | `safeline-ab reset --confirm` |
+| reload | 重新加载配置文件 | `safeline-ab reload` |
+| version | 显示版本信息 | `safeline-ab version` |
+| log level | 设置日志级别 | `safeline-ab log level INFO` |
+| log retention | 设置日志保留天数 | `safeline-ab log retention 30` |
+| log clean | 清理过期日志文件 | `safeline-ab log clean` |
+| ip-group high-risk | 设置高危IP组名称 | `safeline-ab ip-group high-risk "黑名单"` |
+| ip-group low-risk | 设置低危IP组名称 | `safeline-ab ip-group low-risk "人机验证"` |
+| ip-group map | 配置攻击类型与IP组的映射 | `safeline-ab ip-group map 0 high` |
 
 ## 使用方法
 
@@ -157,7 +157,7 @@ sudo systemctl restart safeline-autoblocker
 ### 手动运行
 
 ```bash
-sudo python3 /opt/safeline/scripts/autoblocker.py
+safeline-ab
 ```
 
 ## 攻击类型参考
@@ -264,8 +264,8 @@ sudo rm -rf /opt/safeline
    
 使用命令行工具修改：
 ```bash
-sudo python3 /opt/safeline/scripts/autoblocker.py ip-group high-risk "黑名单"
-sudo python3 /opt/safeline/scripts/autoblocker.py ip-group low-risk "人机验证"
+safeline-ab ip-group high-risk "黑名单"
+safeline-ab ip-group low-risk "人机验证"
 ```
 
 4. **如何只监控特定类型的攻击？**
@@ -276,7 +276,7 @@ sudo python3 /opt/safeline/scripts/autoblocker.py ip-group low-risk "人机验�
    
 使用命令行工具修改：
 ```bash
-sudo python3 /opt/safeline/scripts/autoblocker.py set GENERAL QUERY_INTERVAL 30
+safeline-ab set GENERAL QUERY_INTERVAL 30
 ```
 
 6. **如何在雷池WAF中创建IP组？**
@@ -294,14 +294,14 @@ sudo tail -f /opt/safeline/scripts/logs/info.log
    
 使用命令行工具修改：
 ```bash
-sudo python3 /opt/safeline/scripts/autoblocker.py log retention 30
+safeline-ab log retention 30
 ```
 
 9. **如何手动清理过期日志？**
    
 可以使用以下命令手动触发日志清理：
 ```bash
-sudo python3 /opt/safeline/scripts/autoblocker.py log clean
+safeline-ab log clean
 ```
 
 10. **如何确认程序是否正在运行？**
@@ -316,6 +316,20 @@ cat /var/run/safeline-autoblocker.pid
 ```
 
 ## 更新日志
+
+### v2.0.0 (2025-04-16)
+- 重构代码结构，提高代码可读性和可维护性
+- 优化代码逻辑，提高程序性能和稳定性
+- 新增命令行参数，提供更灵活的配置和管理方式
+- 改进错误处理，提高程序的健壮性
+- 重构命令行接口，提供更简洁的使用方式
+- 支持 safeline-ab 命令直接调用
+- 优化进程管理机制，提供更可靠的PID文件处理
+- 改进配置文件管理，支持实时重载
+- 增强攻击IP查询配置功能，支持更灵活的配置和查询更多的IP
+- 优化IP组管理，支持动态配置IP组映射
+- 提升性能和稳定性
+- 完善文档和使用说明
 
 ### v1.3.0 (2025-04-13)
 - 修复已知问题
